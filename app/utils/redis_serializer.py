@@ -65,9 +65,33 @@ class RedisModelMixin:
 
     def redis_key(self, prefix: str) -> str:
         """Generate Redis key for this model instance"""
-        if hasattr(self, "id"):
-            return RedisSerializer.generate_key(prefix, self.id)
-        raise AttributeError("Model must have 'id' attribute to generate Redis key")
+        # Try different ID field names
+        for id_field in ["id", "session_id"]:
+            if hasattr(self, id_field):
+                return RedisSerializer.generate_key(prefix, getattr(self, id_field))
+        raise AttributeError("Model must have 'id' or 'session_id' attribute to generate Redis key")
+
+    async def save_to_redis(self, redis_client, prefix: str | None = None) -> None:
+        """Save this model to Redis"""
+        if prefix is None:
+            # Use class name as default prefix
+            prefix = self.__class__.__name__.lower()
+
+        key = self.redis_key(prefix)
+        await redis_client.set(key, self.to_redis())
+
+    @classmethod
+    async def load_from_redis(cls: type[T], redis_client, model_id: str, prefix: str | None = None) -> T | None:
+        """Load model from Redis by ID"""
+        if prefix is None:
+            prefix = cls.__name__.lower()
+
+        key = RedisSerializer.generate_key(prefix, model_id)
+        data = await redis_client.get(key)
+
+        if data:
+            return cls.from_redis(data)
+        return None
 
 
 # Custom JSON encoder for datetime objects
