@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  localstack:
+    image: localstack/localstack:3.0
+    container_name: postgres-replication-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=secretsmanager,iam
+      - DEBUG=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LOCALSTACK_HOST=localstack
+    volumes:
+      - "./localstack-init:/etc/localstack/init/ready.d"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    networks:
+      - postgres-replication-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: postgres-replication-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - postgres-replication-net
+
+  postgres-primary:
+    image: postgres:15
+    container_name: postgres-replication-primary
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=testdb
+      - POSTGRES_USER=testuser
+      - POSTGRES_PASSWORD=testpass
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+    command: >
+      postgres
+      -c wal_level=logical
+      -c max_replication_slots=10
+      -c max_wal_senders=10
+      -c shared_preload_libraries=pg_stat_statements
+    networks:
+      - postgres-replication-net
+    volumes:
+      - postgres-primary-data:/var/lib/postgresql/data
+
+  postgres-replica:
+    image: postgres:15
+    container_name: postgres-replication-replica
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_DB=testdb
+      - POSTGRES_USER=testuser
+      - POSTGRES_PASSWORD=testpass
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+    command: >
+      postgres
+      -c wal_level=logical
+      -c max_replication_slots=10
+      -c max_wal_senders=10
+      -c shared_preload_libraries=pg_stat_statements
+    networks:
+      - postgres-replication-net
+    volumes:
+      - postgres-replica-data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: postgres-replication-app
+    ports:
+      - "8000:8000"
+    environment:
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      - REDIS_URL=redis://redis:6379
+      - AUTH_KEY=dev-auth-key-12345
+      - POSTGRES_PRIMARY_HOST=postgres-primary
+      - POSTGRES_REPLICA_HOST=postgres-replica
+    depends_on:
+      - localstack
+      - redis
+      - postgres-primary
+      - postgres-replica
+    networks:
+      - postgres-replication-net
+    volumes:
+      - "./app:/app/app"
+      - "./tests:/app/tests"
+
+volumes:
+  postgres-primary-data:
+  postgres-replica-data:
+
+networks:
+  postgres-replication-net:
+    driver: bridge
