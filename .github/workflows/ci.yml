@@ -53,9 +53,25 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U testuser -d testdb"
           --health-interval 10s
           --health-timeout 5s
+          --health-retries 5
+      
+      localstack:
+        image: localstack/localstack:3.0
+        ports:
+          - 4566:4566
+        env:
+          DEBUG: 1
+          SERVICES: secretsmanager,rds
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+        options: >-
+          --health-cmd "curl -f http://localhost:4566/_localstack/health || exit 1"
+          --health-interval 30s
+          --health-timeout 10s
           --health-retries 5
 
     steps:
@@ -70,6 +86,29 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[dev,lint]"
+    
+    - name: Install AWS CLI for LocalStack
+      run: |
+        pip install awscli-local
+    
+    - name: Wait for LocalStack to be ready
+      run: |
+        timeout 60 bash -c 'until curl -f http://localhost:4566/_localstack/health; do sleep 2; done'
+    
+    - name: Set up LocalStack secrets
+      run: |
+        # Create the test secrets that the tests expect
+        awslocal secretsmanager create-secret \
+          --name "test/postgres/primary" \
+          --secret-string '{"username":"testuser","password":"testpass","host":"localhost","port":5432,"dbname":"testdb"}' || true
+        
+        awslocal secretsmanager create-secret \
+          --name "primary-db-creds" \
+          --secret-string '{"username":"testuser","password":"testpass","host":"localhost","port":5432,"dbname":"testdb"}' || true
+        
+        awslocal secretsmanager create-secret \
+          --name "test/auth/admin" \
+          --secret-string '{"username":"admin","password":"admin123"}' || true
     
     - name: Run tests with coverage
       env:
@@ -87,6 +126,8 @@ jobs:
         file: ./coverage.xml
         flags: unittests
         name: codecov-umbrella
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: false
 
   build:
     runs-on: ubuntu-latest

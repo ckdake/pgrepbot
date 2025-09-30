@@ -50,6 +50,10 @@ create_secret_with_retry \
     "test/auth/admin" \
     '{"username":"admin","password":"admin123"}'
 
+create_secret_with_retry \
+    "test/postgres/primary" \
+    '{"username":"testuser","password":"testpass","host":"localhost","port":5432,"dbname":"testdb"}'
+
 # Verify secrets were created
 echo ""
 echo "Verifying secrets..."
