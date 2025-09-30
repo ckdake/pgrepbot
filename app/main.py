@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.api import auth, models_test
+from app.api import auth, models_test, aws
 
 app = FastAPI(
     title="PostgreSQL Replication Manager",
@@ -20,6 +20,7 @@ templates = Jinja2Templates(directory="app/templates")
 # Include API routers
 app.include_router(auth.router)
 app.include_router(models_test.router)
+app.include_router(aws.router)
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -90,6 +91,7 @@ async def root(request: Request):
                 <a href="/docs">API Documentation</a>
                 <a href="/health">Health Check</a>
                 <a href="/api/models/test">Model Validation Test</a>
+                <a href="/api/aws/test">AWS Integration Test</a>
                 <a href="/api/auth/me">User Info</a>
             </div>
 
@@ -97,8 +99,8 @@ async def root(request: Request):
             <ul>
                 <li>✅ Task 1: Project structure and development environment</li>
                 <li>✅ Task 2: Core data models and validation</li>
-                <li>🔄 Task 3: Authentication and authorization system</li>
-                <li>⏳ Task 4: AWS service integration layer</li>
+                <li>✅ Task 3: Authentication and authorization system</li>
+                <li>🔄 Task 4: AWS service integration layer</li>
             </ul>
 
             <h3>Task 3 Features</h3>

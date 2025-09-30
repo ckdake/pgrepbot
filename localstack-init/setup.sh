@@ -3,25 +3,62 @@
 echo "Setting up LocalStack services for PostgreSQL Replication Manager..."
 
 # Wait for LocalStack to be ready
-sleep 10
+echo "Waiting for LocalStack to be ready..."
+sleep 15
+
+# Function to create secret with retry
+create_secret_with_retry() {
+    local name=$1
+    local secret_string=$2
+    local max_attempts=3
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        echo "Creating secret $name (attempt $attempt/$max_attempts)..."
+        if awslocal secretsmanager create-secret \
+            --name "$name" \
+            --secret-string "$secret_string" 2>/dev/null; then
+            echo "✅ Successfully created secret: $name"
+            return 0
+        else
+            echo "⚠️  Failed to create secret $name, retrying..."
+            sleep 2
+            ((attempt++))
+        fi
+    done
+    
+    echo "❌ Failed to create secret $name after $max_attempts attempts"
+    return 1
+}
 
 # Create test secrets in Secrets Manager
 echo "Creating test secrets..."
-awslocal secretsmanager create-secret \
-  --name "test/postgres/primary" \
-  --secret-string '{"username":"testuser","password":"testpass","host":"postgres-primary","port":"5432","database":"testdb"}'
 
-awslocal secretsmanager create-secret \
-  --name "test/postgres/replica" \
-  --secret-string '{"username":"testuser","password":"testpass","host":"postgres-replica","port":"5432","database":"testdb"}'
+create_secret_with_retry \
+    "test/postgres/primary" \
+    '{"username":"testuser","password":"testpass","host":"postgres-primary","port":5432,"dbname":"testdb"}'
 
-awslocal secretsmanager create-secret \
-  --name "test/auth/admin" \
-  --secret-string '{"username":"admin","password":"admin123"}'
+create_secret_with_retry \
+    "test/postgres/replica" \
+    '{"username":"testuser","password":"testpass","host":"postgres-replica","port":5432,"dbname":"testdb"}'
 
-echo "LocalStack setup complete!"
-echo "Services available:"
-echo "- Secrets Manager: http://localhost:4566"
-echo "- Redis: Direct connection on localhost:6379"
-echo "- PostgreSQL Primary: localhost:5432"
-echo "- PostgreSQL Replica: localhost:5433"
+create_secret_with_retry \
+    "test/auth/admin" \
+    '{"username":"admin","password":"admin123"}'
+
+# Verify secrets were created
+echo ""
+echo "Verifying secrets..."
+awslocal secretsmanager list-secrets --query 'SecretList[].Name' --output table
+
+echo ""
+echo "✅ LocalStack setup complete!"
+echo ""
+echo "🔧 Services available:"
+echo "  - Secrets Manager: http://localhost:4566"
+echo "  - Redis: localhost:6379 (direct connection)"
+echo "  - PostgreSQL Primary: localhost:5432"
+echo "  - PostgreSQL Replica: localhost:5433"
+echo ""
+echo "🧪 Test AWS integrations:"
+echo "  curl http://localhost:8000/api/aws/test"

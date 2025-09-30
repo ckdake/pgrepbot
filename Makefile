@@ -79,10 +79,21 @@ run:
 		exit 1; \
 	fi
 	@echo "🚀 Starting PostgreSQL Replication Manager..."
+	@echo ""
+	@echo "🔧 AWS Integration Status:"
+	@echo "  LocalStack (Secrets Manager): http://localhost:4566"
+	@echo "  Redis: localhost:6379"
+	@echo "  PostgreSQL Primary: localhost:5432"
+	@echo "  PostgreSQL Replica: localhost:5433"
+	@echo ""
+	@echo "🧪 Test AWS integrations at: http://localhost:8000/api/aws/test"
+	@echo ""
 	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
 	export AWS_ACCESS_KEY_ID=test && \
 	export AWS_SECRET_ACCESS_KEY=test && \
 	export AWS_DEFAULT_REGION=us-east-1 && \
+	export REDIS_HOST=localhost && \
+	export REDIS_PORT=6379 && \
 	export REDIS_URL=redis://localhost:6379 && \
 	export AUTH_KEY=dev-auth-key-12345 && \
 	python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -103,6 +114,8 @@ test:
 	export AWS_ACCESS_KEY_ID=test && \
 	export AWS_SECRET_ACCESS_KEY=test && \
 	export AWS_DEFAULT_REGION=us-east-1 && \
+	export REDIS_HOST=localhost && \
+	export REDIS_PORT=6379 && \
 	export REDIS_URL=redis://localhost:6379 && \
 	python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=html
 	@echo ""
