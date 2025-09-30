@@ -35,12 +35,16 @@ create_secret_with_retry() {
 echo "Creating test secrets..."
 
 create_secret_with_retry \
-    "test/postgres/primary" \
-    '{"username":"testuser","password":"testpass","host":"postgres-primary","port":5432,"dbname":"testdb"}'
+    "primary-db-creds" \
+    '{"username":"testuser","password":"testpass","host":"localhost","port":5432,"dbname":"testdb"}'
 
 create_secret_with_retry \
-    "test/postgres/replica" \
-    '{"username":"testuser","password":"testpass","host":"postgres-replica","port":5432,"dbname":"testdb"}'
+    "replica-db-creds" \
+    '{"username":"testuser","password":"testpass","host":"localhost","port":5433,"dbname":"testdb"}'
+
+create_secret_with_retry \
+    "physical-replica-db-creds" \
+    '{"username":"testuser","password":"testpass","host":"localhost","port":5434,"dbname":"testdb"}'
 
 create_secret_with_retry \
     "test/auth/admin" \

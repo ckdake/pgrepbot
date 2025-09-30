@@ -21,3 +21,11 @@ ON CONFLICT DO NOTHING;
 
 -- Grant replication permissions
 ALTER USER testuser REPLICATION;
+
+-- Note: pg_hba.conf will be configured via Docker environment
+
+-- Note: pg_hba.conf configuration is handled by Docker environment
+
+-- Configure pg_hba.conf for replication (this needs to be done via Docker environment)
+-- The following line should be added to pg_hba.conf:
+-- host replication testuser all md5

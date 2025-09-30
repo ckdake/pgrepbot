@@ -46,7 +46,7 @@
   - Update `make run` to include test PostgreSQL databases and display connection health dashboard
   - _Requirements: 5.1, 5.2, 6.2, 6.5_
 
-- [ ] 6. Implement replication discovery and monitoring core
+- [x] 6. Implement replication discovery and monitoring core
   - Build logical replication discovery by querying pg_publication and pg_subscription system views
   - Implement physical replication discovery using pg_stat_replication and RDS API integration
   - Create replication metrics collection system for lag monitoring and status tracking
@@ -57,12 +57,12 @@
   - _Requirements: 1.1, 1.3, 2.1, 2.2, 2.3, 7.1, 7.3_
 
 - [ ] 7. Build replication stream management service
-  - Implement logical replication stream creation with publication and subscription setup
+  - Implement logical replication stream creation with publication and subscription setup, and teardown
   - Add replication stream validation including connectivity and permission checks
   - Create replication monitoring background tasks using APScheduler for continuous status updates
   - Build Redis caching layer for replication metrics with TTL-based expiration
   - Write integration tests for replication stream lifecycle management
-  - Add `/api/replication/create` and `/api/replication/status` endpoints for stream management
+  - Add `/api/replication/create` and `/api/replication/status` and `/api/replication/destroy` endpoints for stream management
   - Update `make run` to demonstrate creating a test replication stream and monitoring its status
   - _Requirements: 3.1, 3.2, 3.4, 3.5, 2.4, 2.5_
 

@@ -60,7 +60,16 @@ dev-services:
 	@echo "  LocalStack: http://localhost:4566"
 	@echo "  Redis: localhost:6379"
 	@echo "  PostgreSQL Primary: localhost:5432"
-	@echo "  PostgreSQL Replica: localhost:5433"
+	@echo "  PostgreSQL Logical Replica: localhost:5433"
+	@echo "  PostgreSQL Physical Replica: localhost:5434"
+	@echo ""
+	@echo "🔄 Setting up test replication data..."
+	@sleep 3
+	@if [ -d "venv" ] && [ -f "venv/bin/python" ]; then \
+		./venv/bin/python scripts/setup_test_replication.py; \
+	else \
+		echo "⚠️  Virtual environment not found. Run 'make setup' first to populate test data."; \
+	fi
 
 # Stop development services
 dev-services-stop:
@@ -84,7 +93,8 @@ run:
 	@echo "  LocalStack (Secrets Manager): http://localhost:4566"
 	@echo "  Redis: localhost:6379"
 	@echo "  PostgreSQL Primary: localhost:5432"
-	@echo "  PostgreSQL Replica: localhost:5433"
+	@echo "  PostgreSQL Logical Replica: localhost:5433"
+	@echo "  PostgreSQL Physical Replica: localhost:5434"
 	@echo ""
 	@echo "🧪 Test AWS integrations at: http://localhost:8000/api/aws/test"
 	@echo ""

@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.api import auth, aws, databases, models_test
+from app.api import auth, aws, databases, models_test, replication
 
 app = FastAPI(
     title="PostgreSQL Replication Manager",
@@ -22,6 +22,7 @@ app.include_router(auth.router)
 app.include_router(models_test.router)
 app.include_router(aws.router)
 app.include_router(databases.router)
+app.include_router(replication.router)
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -84,7 +85,7 @@ async def root(request: Request):
                 <p>LocalStack integration: Ready for development
                    (Secrets Manager + IAM)</p>
                 <p>Redis: Direct connection available on port 6379</p>
-                <p>PostgreSQL: Primary (5432) and Replica (5433) databases ready</p>
+                <p>PostgreSQL: Primary (5432), Logical Replica (5433), and Physical Replica (5434) databases ready</p>
             </div>
 
             <div class="nav">
@@ -94,6 +95,7 @@ async def root(request: Request):
                 <a href="/api/models/test">Model Validation Test</a>
                 <a href="/api/aws/test">AWS Integration Test</a>
                 <a href="/api/databases/test">Database Connection Test</a>
+                <a href="/api/replication/discover">Replication Discovery</a>
                 <a href="/api/auth/me">User Info</a>
             </div>
 
@@ -103,7 +105,8 @@ async def root(request: Request):
                 <li>✅ Task 2: Core data models and validation</li>
                 <li>✅ Task 3: Authentication and authorization system</li>
                 <li>✅ Task 4: AWS service integration layer</li>
-                <li>🔄 Task 5: PostgreSQL connection management system</li>
+                <li>✅ Task 5: PostgreSQL connection management system</li>
+                <li>🔄 Task 6: Replication discovery and monitoring core</li>
             </ul>
 
             <h3>Task 3 Features</h3>

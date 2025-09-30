@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   localstack:
     image: localstack/localstack:3.0
@@ -35,6 +33,7 @@ services:
       - POSTGRES_USER=testuser
       - POSTGRES_PASSWORD=testpass
       - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+      - POSTGRES_HOST_AUTH_METHOD=scram-sha-256
     command: >
       postgres
       -c wal_level=logical
@@ -46,6 +45,9 @@ services:
     volumes:
       - postgres-primary-data:/var/lib/postgresql/data
       - ./docker-init/primary-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./docker-init/pg_hba.conf:/docker-entrypoint-initdb.d/pg_hba.conf
+      - ./docker-init/setup-pg-hba.sh:/docker-entrypoint-initdb.d/02-setup-pg-hba.sh
+      - ./docker-init/02-setup-replication.sh:/docker-entrypoint-initdb.d/02-setup-replication.sh
 
   postgres-replica:
     image: postgres:15
@@ -57,6 +59,7 @@ services:
       - POSTGRES_USER=testuser
       - POSTGRES_PASSWORD=testpass
       - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+      - POSTGRES_HOST_AUTH_METHOD=scram-sha-256
     command: >
       postgres
       -c wal_level=logical
@@ -68,6 +71,25 @@ services:
     volumes:
       - postgres-replica-data:/var/lib/postgresql/data
       - ./docker-init/replica-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./docker-init/pg_hba.conf:/docker-entrypoint-initdb.d/pg_hba.conf
+      - ./docker-init/setup-pg-hba.sh:/docker-entrypoint-initdb.d/02-setup-pg-hba.sh
+    depends_on:
+      - postgres-primary
+
+  postgres-physical-replica:
+    image: postgres:15
+    container_name: postgres-replication-physical-replica
+    ports:
+      - "5434:5432"
+    environment:
+      - POSTGRES_PASSWORD=testpass
+    networks:
+      - postgres-replication-net
+    volumes:
+      - postgres-physical-replica-data:/var/lib/postgresql/data
+      - ./docker-init/setup-physical-replica.sh:/setup-physical-replica.sh
+      - ./docker-init/pg_hba.conf:/pg_hba.conf
+    command: ["bash", "/setup-physical-replica.sh"]
     depends_on:
       - postgres-primary
 
@@ -78,14 +100,17 @@ services:
       - postgres-replication-net
     volumes:
       - ./docker-init/setup-subscription.sh:/setup-subscription.sh
-    command: ["bash", "/setup-subscription.sh"]
+      - ./docker-init/configure-auth.sh:/configure-auth.sh
+    command: ["bash", "-c", "/configure-auth.sh && /setup-subscription.sh"]
     depends_on:
       - postgres-primary
       - postgres-replica
+      - postgres-physical-replica
 
 volumes:
   postgres-primary-data:
   postgres-replica-data:
+  postgres-physical-replica-data:
 
 networks:
   postgres-replication-net:
