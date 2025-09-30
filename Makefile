@@ -9,7 +9,7 @@ help:
 	@echo "  make dev-services - Start supporting services (LocalStack, Redis, PostgreSQL)"
 	@echo "  make run         - Run the application locally"
 	@echo "  make test        - Run the test suite with coverage"
-	@echo "  make lint        - Run code quality checks"
+	@echo "  make lint        - Run comprehensive linting (Python, Shell, Docker, Markdown)"
 	@echo ""
 	@echo "📦 Production:"
 	@echo "  make build       - Build production Docker image"
@@ -28,6 +28,8 @@ help:
 	@echo "  http://localhost:8000/docs - API documentation"
 	@echo "  http://localhost:4566 - LocalStack dashboard"
 
+
+
 # Set up local development environment
 setup:
 	@echo "🔧 Setting up local development environment..."
@@ -35,16 +37,17 @@ setup:
 		echo "📦 Creating virtual environment..."; \
 		python3 -m venv venv; \
 	fi
-	@echo "📥 Installing dependencies..."
+	@echo "📥 Installing dependencies from pyproject.toml..."
 	@./venv/bin/pip install --upgrade pip
-	@./venv/bin/pip install -r requirements-dev.txt
+	@./venv/bin/pip install -e ".[dev,lint]"
 	@echo ""
 	@echo "✅ Setup complete!"
 	@echo ""
 	@echo "💡 Next steps:"
 	@echo "  1. source venv/bin/activate"
-	@echo "  2. make dev-services"
-	@echo "  3. make run"
+
+	@echo "  3. make dev-services"
+	@echo "  4. make run"
 
 # Start supporting services (LocalStack, Redis, PostgreSQL)
 dev-services:
@@ -118,10 +121,20 @@ lint:
 		echo "💡 Run: source venv/bin/activate"; \
 		exit 1; \
 	fi
-	@echo "🔍 Running ruff linter..."
+	@echo "🔍 Running Python linting with ruff..."
 	@python -m ruff check app/ tests/
-	@echo "🎨 Running ruff formatter check..."
+	@echo "🎨 Running Python formatter check..."
 	@python -m ruff format --check app/ tests/
+	@echo "🐚 Running shell script linting..."
+	@find . -name "*.sh" -type f -not -path "./venv/*" -exec shellcheck {} + || echo "No shell scripts found"
+	@echo "🐳 Running Dockerfile linting..."
+	@if command -v hadolint >/dev/null 2>&1; then \
+		find . -name "Dockerfile*" -type f -not -path "./venv/*" -exec hadolint {} +; \
+	else \
+		echo "hadolint not found - install via: brew install hadolint (or see https://github.com/hadolint/hadolint)"; \
+	fi
+	@echo "📝 Running Markdown linting..."
+	@find . -name "*.md" -type f -not -path "./venv/*" -not -path "./.pytest_cache/*" -not -path "./.ruff_cache/*" -not -path "./htmlcov/*" -exec pymarkdown scan {} + || echo "No Markdown files found"
 
 # Fix linting issues locally
 lint-fix:
@@ -134,9 +147,11 @@ lint-fix:
 		echo "💡 Run: source venv/bin/activate"; \
 		exit 1; \
 	fi
-	@echo "🔧 Fixing linting issues..."
+	@echo "🔧 Fixing Python linting issues..."
 	@python -m ruff check --fix app/ tests/
 	@python -m ruff format app/ tests/
+	@echo "📝 Fixing Markdown formatting..."
+	@find . -name "*.md" -type f -not -path "./venv/*" -not -path "./.pytest_cache/*" -not -path "./.ruff_cache/*" -not -path "./htmlcov/*" -exec pymarkdown fix {} + || echo "No Markdown files found"
 
 # Build production Docker image (no dev tools)
 build:

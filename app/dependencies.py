@@ -1,6 +1,7 @@
 """
 Dependency injection for FastAPI
 """
+
 import os
 
 import redis.asyncio as redis
@@ -24,7 +25,7 @@ async def get_redis_client() -> redis.Redis:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Redis connection failed: {str(e)}",
-            )
+            ) from e
 
     return _redis_client
 

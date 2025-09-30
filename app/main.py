@@ -2,10 +2,6 @@
 PostgreSQL Replication Manager - Main FastAPI Application
 """
 
-"""
-PostgreSQL Replication Manager - Main FastAPI Application
-"""
-
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -44,8 +40,8 @@ async def root(request: Request):
             <div class="user-info">
                 <h3>👤 Logged in as: {user.full_name or user.username}</h3>
                 <p>Authentication Method: {user.auth_method}</p>
-                <p>Roles: {', '.join(user.roles) if user.roles else 'None'}</p>
-                <p>Admin: {'Yes' if user.is_admin else 'No'}</p>
+                <p>Roles: {", ".join(user.roles) if user.roles else "None"}</p>
+                <p>Admin: {"Yes" if user.is_admin else "No"}</p>
                 <a href="/api/auth/logout" style="color: #cc0000;">Logout</a>
             </div>
         """
@@ -77,9 +73,9 @@ async def root(request: Request):
     <body>
         <div class="container">
             <h1>PostgreSQL Replication Manager</h1>
-            
+
             {user_info}
-            
+
             <div class="status">
                 <h3>✅ System Status: Running</h3>
                 <p>FastAPI application is running successfully on localhost:8000</p>

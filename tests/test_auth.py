@@ -1,6 +1,7 @@
 """
 Tests for authentication system
 """
+
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -201,10 +202,7 @@ class TestAuthenticationAPI:
         client = TestClient(app)
 
         # Test that the endpoint exists (even if it fails due to missing Redis)
-        response = client.post("/api/auth/login", json={
-            "auth_method": "auth_key",
-            "auth_key": "test"
-        })
+        response = client.post("/api/auth/login", json={"auth_method": "auth_key", "auth_key": "test"})
 
         # Should not be 404 (endpoint exists)
         assert response.status_code != 404

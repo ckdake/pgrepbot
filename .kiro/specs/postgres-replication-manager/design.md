@@ -27,7 +27,7 @@ The system is built using modern Python technologies optimized for async operati
 The project follows modern Python development practices:
 
 - **Virtual Environment**: Python venv for isolated dependency management
-- **Package Management**: pip with pinned versions in requirements.txt and requirements-dev.txt
+- **Package Management**: Modern Python packaging with pyproject.toml for dependencies and metadata
 - **Code Quality**: Ruff configured for 120-character line length and comprehensive linting
 - **Testing**: pytest with coverage reporting (minimum 80% coverage requirement)
 - **Local Development**: Make commands for setup, testing, linting, and service management
@@ -481,7 +481,7 @@ Comprehensive .gitignore covering:
 - **Development**: Virtual environment with hot reload and debugging tools
 - **Production**: Multi-stage Docker builds with optimized Python images
 - **Testing**: LocalStack for AWS service emulation during development
-- **Dependencies**: Separate requirements.txt (production) and requirements-dev.txt (development)
+- **Dependencies**: Modern pyproject.toml with separate [project.optional-dependencies] for dev and lint tools
 
 ### Local Development and Testing with LocalStack
 

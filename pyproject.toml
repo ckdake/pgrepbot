@@ -1,3 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "postgres-replication-manager"
+version = "1.0.0"
+description = "Centralized management of PostgreSQL logical replication across multi-cloud environments"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "PostgreSQL Replication Manager Team"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: System :: Systems Administration",
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi==0.117.1",
+    "uvicorn[standard]==0.37.0",
+    "asyncpg==0.30.0",
+    "redis==5.0.1",
+    "boto3==1.34.0",
+    "pydantic==2.11.9",
+    "python-jose[cryptography]==3.3.0",
+    "python-multipart==0.0.6",
+    "jinja2==3.1.2",
+    "aiofiles==23.2.1",
+    "apscheduler==3.10.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.4.2",
+    "pytest-asyncio==0.21.1",
+    "pytest-cov==6.0.0",
+    "httpx==0.25.2",
+    "ruff==0.13.2",
+]
+lint = [
+    "ruff==0.13.2",
+    "shellcheck-py==0.10.0.1",
+    "pymarkdownlnt==0.9.32",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/postgres-replication-manager"
+Repository = "https://github.com/your-org/postgres-replication-manager"
+Issues = "https://github.com/your-org/postgres-replication-manager/issues"
+
+[project.scripts]
+pgrepman = "app.main:main"
+
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
 exclude = [
@@ -34,7 +93,9 @@ target-version = "py313"
 [tool.ruff.lint]
 # Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "T20"]
-ignore = []
+ignore = [
+    "B008",  # Allow function calls in argument defaults (FastAPI Depends pattern)
+]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
@@ -77,3 +138,6 @@ precision = 2
 
 [tool.coverage.html]
 directory = "htmlcov"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

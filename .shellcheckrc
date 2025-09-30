@@ -1,0 +1,11 @@
+# ShellCheck configuration
+# Disable specific warnings that are not relevant for our use case
+
+# SC2034: Variable appears unused (common in scripts with sourced variables)
+disable=SC2034
+
+# SC1091: Not following sourced files (we don't want to check sourced files)
+disable=SC1091
+
+# Enable all other checks
+enable=all

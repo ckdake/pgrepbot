@@ -12,10 +12,10 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
-echo "📍 Found Python $PYTHON_VERSION"
+echo "📍 Found Python ${PYTHON_VERSION}"
 
 # Create virtual environment if it doesn't exist
-if [ ! -d "venv" ]; then
+if [[ ! -d "venv" ]]; then
     echo "📦 Creating virtual environment..."
     python3 -m venv venv
 fi
@@ -30,10 +30,10 @@ pip install --upgrade pip
 
 # Install dependencies
 echo "📚 Installing Python dependencies..."
-pip install -r requirements.txt
+pip install -e ".[dev,lint]"
 
 # Create .env file for local development
-if [ ! -f ".env" ]; then
+if [[ ! -f ".env" ]]; then
     echo "⚙️  Creating .env file for local development..."
     cat > .env << EOF
 # Local development environment variables

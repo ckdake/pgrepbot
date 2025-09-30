@@ -1,0 +1,25 @@
+# Hadolint configuration for Dockerfile linting
+ignored:
+  # DL3008: Pin versions in apt get install (we use specific base images)
+  - DL3008
+  # DL3009: Delete the apt-get lists after installing something (handled by base images)
+  - DL3009
+  # DL3015: Avoid additional packages by specifying --no-install-recommends
+  - DL3015
+
+# Trusted registries for base images
+trustedRegistries:
+  - docker.io
+  - gcr.io
+  - registry.hub.docker.com
+
+# Allow specific labels
+allowedLabels:
+  - maintainer
+  - version
+  - description
+  - org.opencontainers.image.title
+  - org.opencontainers.image.description
+  - org.opencontainers.image.version
+  - org.opencontainers.image.source
+  - org.opencontainers.image.licenses

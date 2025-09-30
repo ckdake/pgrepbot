@@ -1,6 +1,7 @@
 """
 FastAPI authentication middleware
 """
+
 from collections.abc import Callable
 
 import redis.asyncio as redis
@@ -56,6 +57,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             else:
                 # Redirect to login page for web interface
                 from fastapi.responses import RedirectResponse
+
                 return RedirectResponse(url="/login", status_code=302)
 
         # Add user and session to request state

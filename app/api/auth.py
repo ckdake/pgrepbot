@@ -1,6 +1,7 @@
 """
 Authentication API endpoints
 """
+
 import redis.asyncio as redis
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
@@ -11,8 +12,6 @@ from app.models.auth import AuthConfig, LoginRequest, LoginResponse, User, UserS
 from app.services.auth import AuthenticationService
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
-
-
 
 
 async def get_auth_service(redis_client: redis.Redis = Depends(get_redis_client)) -> AuthenticationService:
@@ -96,7 +95,7 @@ async def oidc_authorize(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/oidc/callback")
@@ -175,28 +174,34 @@ async def get_available_auth_methods(
     methods = []
 
     if config.iam_identity_center_enabled:
-        methods.append({
-            "method": "iam_identity_center",
-            "name": "AWS IAM Identity Center",
-            "description": "Single sign-on with AWS IAM Identity Center",
-            "primary": True,
-        })
+        methods.append(
+            {
+                "method": "iam_identity_center",
+                "name": "AWS IAM Identity Center",
+                "description": "Single sign-on with AWS IAM Identity Center",
+                "primary": True,
+            }
+        )
 
     if config.secrets_manager_enabled:
-        methods.append({
-            "method": "secrets_manager",
-            "name": "Username/Password",
-            "description": "Login with username and password stored in AWS Secrets Manager",
-            "primary": not config.iam_identity_center_enabled,
-        })
+        methods.append(
+            {
+                "method": "secrets_manager",
+                "name": "Username/Password",
+                "description": "Login with username and password stored in AWS Secrets Manager",
+                "primary": not config.iam_identity_center_enabled,
+            }
+        )
 
     if config.auth_key_enabled:
-        methods.append({
-            "method": "auth_key",
-            "name": "Auth Key",
-            "description": "Simple authentication using a shared key",
-            "primary": not config.iam_identity_center_enabled and not config.secrets_manager_enabled,
-        })
+        methods.append(
+            {
+                "method": "auth_key",
+                "name": "Auth Key",
+                "description": "Simple authentication using a shared key",
+                "primary": not config.iam_identity_center_enabled and not config.secrets_manager_enabled,
+            }
+        )
 
     return {"methods": methods}
 

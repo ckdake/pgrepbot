@@ -1,6 +1,7 @@
 """
 Authentication service handling multiple authentication methods
 """
+
 import json
 import os
 import secrets

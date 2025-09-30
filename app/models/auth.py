@@ -1,6 +1,7 @@
 """
 Authentication and authorization models
 """
+
 import uuid
 from datetime import datetime, timedelta
 from typing import Literal
@@ -65,9 +66,7 @@ class UserSession(BaseModel, RedisModelMixin):
 
     # Session timing
     created_at: DatetimeSerializer = Field(default_factory=datetime.utcnow)
-    expires_at: DatetimeSerializer = Field(
-        default_factory=lambda: datetime.utcnow() + timedelta(hours=24)
-    )
+    expires_at: DatetimeSerializer = Field(default_factory=lambda: datetime.utcnow() + timedelta(hours=24))
     last_activity: DatetimeSerializer = Field(default_factory=datetime.utcnow)
 
     # Session status
@@ -107,9 +106,7 @@ class AuthConfig(BaseModel, RedisModelMixin):
 
     # Secrets Manager authentication configuration
     secrets_manager_enabled: bool = Field(default=True)
-    user_credentials_secret_arn: str | None = Field(
-        None, description="Secrets Manager ARN containing user credentials"
-    )
+    user_credentials_secret_arn: str | None = Field(None, description="Secrets Manager ARN containing user credentials")
 
     # Auth key configuration
     auth_key_enabled: bool = Field(default=True)
