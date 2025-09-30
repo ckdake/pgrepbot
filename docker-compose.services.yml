@@ -45,6 +45,7 @@ services:
       - postgres-replication-net
     volumes:
       - postgres-primary-data:/var/lib/postgresql/data
+      - ./docker-init/primary-init.sql:/docker-entrypoint-initdb.d/01-init.sql
 
   postgres-replica:
     image: postgres:15
@@ -66,6 +67,21 @@ services:
       - postgres-replication-net
     volumes:
       - postgres-replica-data:/var/lib/postgresql/data
+      - ./docker-init/replica-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    depends_on:
+      - postgres-primary
+
+  replication-setup:
+    image: postgres:15
+    container_name: postgres-replication-setup
+    networks:
+      - postgres-replication-net
+    volumes:
+      - ./docker-init/setup-subscription.sh:/setup-subscription.sh
+    command: ["bash", "/setup-subscription.sh"]
+    depends_on:
+      - postgres-primary
+      - postgres-replica
 
 volumes:
   postgres-primary-data:
