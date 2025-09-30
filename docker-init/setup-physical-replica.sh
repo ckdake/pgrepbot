@@ -13,7 +13,7 @@ done
 echo "Primary database is ready!"
 
 # Check if this is already a replica
-if [ -f /var/lib/postgresql/data/standby.signal ]; then
+if [[ -f /var/lib/postgresql/data/standby.signal ]]; then
   echo "Already configured as physical replica"
   exec gosu postgres postgres
 fi

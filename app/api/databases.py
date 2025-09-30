@@ -89,13 +89,13 @@ async def _add_test_databases(manager: PostgreSQLConnectionManager) -> None:
         # Import here to avoid circular imports
         from app.api.replication import _get_configured_databases
         from app.dependencies import get_redis_client
-        
+
         # Get Redis client and configured databases
         redis_client = await get_redis_client()
         databases = await _get_configured_databases(redis_client)
-        
+
         logger.info(f"Found {len(databases)} configured databases in Redis")
-        
+
         # Add each database to the connection manager
         for db in databases:
             try:
@@ -125,7 +125,7 @@ async def _add_test_databases(manager: PostgreSQLConnectionManager) -> None:
                 username="testuser",
                 password="testpass",
             )
-            
+
             # Add replica database
             await manager.add_database(
                 db_id="replica-fallback",
@@ -381,16 +381,15 @@ async def execute_test_query(database_id: str, query: str):
         ) from e
 
 
-
 @router.post("/reset")
 async def reset_connection_manager():
     """Reset the connection manager to pick up new database configurations."""
     global _connection_manager
-    
+
     if _connection_manager:
         await _connection_manager.close_all()
         _connection_manager = None
-    
+
     return {"message": "Connection manager reset successfully"}
 
 
@@ -398,43 +397,43 @@ async def reset_connection_manager():
 async def reload_database_connections():
     """
     Reload database connections from Redis configuration.
-    
+
     This endpoint clears the current connection manager and reinitializes it
     with the latest database configurations from Redis. Useful for picking up
     configuration changes without restarting the application.
     """
     global _connection_manager
-    
+
     try:
         logger.info("Reloading database connections...")
-        
+
         # Close existing connection manager if it exists
         if _connection_manager:
             logger.info("Closing existing connection manager...")
             await _connection_manager.close_all()
             _connection_manager = None
-        
+
         # Force recreation of connection manager with fresh config
         logger.info("Creating new connection manager...")
         manager = await get_connection_manager()
-        
+
         # Get health status to verify connections
         health_statuses = manager.get_health_status()
         pool_stats = manager.get_pool_stats()
-        
+
         # Count healthy databases
         healthy_count = sum(1 for health in health_statuses.values() if health.is_healthy)
-        
+
         return {
             "success": True,
             "message": "Database connections reloaded successfully",
             "total_databases": len(health_statuses),
             "healthy_databases": healthy_count,
             "databases": list(health_statuses.keys()),
-            "pool_stats": {db_id: stats for db_id, stats in pool_stats.items()},
+            "pool_stats": dict(pool_stats.items()),
             "reloaded_at": datetime.now().isoformat(),
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to reload database connections: {e}")
         raise HTTPException(
@@ -447,25 +446,25 @@ async def reload_database_connections():
 async def clear_connection_cache():
     """
     Clear all cached connections and force fresh connections.
-    
+
     This is more aggressive than reload - it completely destroys the connection
     manager and forces everything to be recreated from scratch.
     """
     global _connection_manager
-    
+
     try:
         logger.info("Clearing connection cache...")
-        
+
         if _connection_manager:
             await _connection_manager.close_all()
             _connection_manager = None
-            
+
         return {
             "success": True,
             "message": "Connection cache cleared successfully",
             "cleared_at": datetime.now().isoformat(),
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to clear connection cache: {e}")
         raise HTTPException(

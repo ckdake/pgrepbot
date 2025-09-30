@@ -13,21 +13,21 @@ create_secret_with_retry() {
     local max_attempts=3
     local attempt=1
     
-    while [ $attempt -le $max_attempts ]; do
-        echo "Creating secret $name (attempt $attempt/$max_attempts)..."
+    while [[ "${attempt}" -le "${max_attempts}" ]]; do
+        echo "Creating secret ${name} (attempt ${attempt}/${max_attempts})..."
         if awslocal secretsmanager create-secret \
-            --name "$name" \
-            --secret-string "$secret_string" 2>/dev/null; then
-            echo "✅ Successfully created secret: $name"
+            --name "${name}" \
+            --secret-string "${secret_string}" 2>/dev/null; then
+            echo "✅ Successfully created secret: ${name}"
             return 0
         else
-            echo "⚠️  Failed to create secret $name, retrying..."
+            echo "⚠️  Failed to create secret ${name}, retrying..."
             sleep 2
             ((attempt++))
         fi
     done
     
-    echo "❌ Failed to create secret $name after $max_attempts attempts"
+    echo "❌ Failed to create secret ${name} after ${max_attempts} attempts"
     return 1
 }
 

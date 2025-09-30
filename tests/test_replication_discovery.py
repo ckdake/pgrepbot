@@ -2,17 +2,18 @@
 Tests for replication discovery and monitoring service.
 """
 
-import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
+
+import pytest
 
 from app.models.database import DatabaseConfig
-from app.models.replication import ReplicationStream, ReplicationMetrics
+from app.models.replication import ReplicationMetrics, ReplicationStream
 from app.services.replication_discovery import (
-    ReplicationDiscoveryService,
-    ReplicationDiscoveryError,
     LogicalReplicationInfo,
     PhysicalReplicationInfo,
+    ReplicationDiscoveryError,
+    ReplicationDiscoveryService,
 )
 
 
@@ -49,7 +50,7 @@ def sample_databases():
             id="550e8400-e29b-41d4-a716-446655440001",
             name="Replica Database",
             host="postgres-replica",
-            port=5432,
+            port=5434,
             database="testdb",
             credentials_arn="arn:aws:secretsmanager:us-east-1:123456789012:secret:replica-creds",
             role="replica",
@@ -111,14 +112,11 @@ class TestReplicationDiscoveryService:
 
         # Mock connection manager methods
         from app.services.postgres_connection import ConnectionHealth
-        mock_health = ConnectionHealth(
-            is_healthy=False,
-            last_check=datetime.utcnow(),
-            error_message="Not connected"
-        )
+
+        mock_health = ConnectionHealth(is_healthy=False, last_check=datetime.utcnow(), error_message="Not connected")
         mock_connection_manager.get_health_status.return_value = mock_health
         mock_connection_manager.add_database = AsyncMock()
-        
+
         # Configure mock responses - need to handle multiple calls
         def mock_execute_query(db_id, query, *args):
             if "pg_publication" in query:
@@ -129,7 +127,7 @@ class TestReplicationDiscoveryService:
                 return subscription_results
             else:
                 return []
-        
+
         mock_connection_manager.execute_query.side_effect = mock_execute_query
 
         # Execute discovery
@@ -178,11 +176,8 @@ class TestReplicationDiscoveryService:
 
         # Mock connection manager methods
         from app.services.postgres_connection import ConnectionHealth
-        mock_health = ConnectionHealth(
-            is_healthy=False,
-            last_check=datetime.utcnow(),
-            error_message="Not connected"
-        )
+
+        mock_health = ConnectionHealth(is_healthy=False, last_check=datetime.utcnow(), error_message="Not connected")
         mock_connection_manager.get_health_status.return_value = mock_health
         mock_connection_manager.add_database = AsyncMock()
 
@@ -192,7 +187,7 @@ class TestReplicationDiscoveryService:
                 return physical_results
             else:
                 return []
-        
+
         mock_connection_manager.execute_query.side_effect = mock_execute_query
 
         # Execute discovery
@@ -209,9 +204,7 @@ class TestReplicationDiscoveryService:
         assert stream.is_managed is False
 
     @pytest.mark.asyncio
-    async def test_collect_logical_metrics_success(
-        self, discovery_service, mock_connection_manager
-    ):
+    async def test_collect_logical_metrics_success(self, discovery_service, mock_connection_manager):
         """Test successful logical replication metrics collection."""
         # Create test stream
         stream = ReplicationStream(
@@ -250,9 +243,7 @@ class TestReplicationDiscoveryService:
         assert metrics.backfill_progress == 80.0  # 4/5 * 100
 
     @pytest.mark.asyncio
-    async def test_collect_physical_metrics_success(
-        self, discovery_service, mock_connection_manager
-    ):
+    async def test_collect_physical_metrics_success(self, discovery_service, mock_connection_manager):
         """Test successful physical replication metrics collection."""
         # Create test stream
         stream = ReplicationStream(
@@ -265,6 +256,7 @@ class TestReplicationDiscoveryService:
 
         # Mock metrics query results
         from datetime import timedelta
+
         metrics_results = [
             {
                 "sent_lsn": "0/2000ABCD",
@@ -309,9 +301,7 @@ class TestReplicationDiscoveryService:
         assert streams == []
 
     @pytest.mark.asyncio
-    async def test_collect_metrics_stream_not_found(
-        self, discovery_service, mock_connection_manager
-    ):
+    async def test_collect_metrics_stream_not_found(self, discovery_service, mock_connection_manager):
         """Test metrics collection when stream is not found."""
         # Create test stream
         stream = ReplicationStream(

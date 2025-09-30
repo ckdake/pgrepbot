@@ -29,8 +29,8 @@ dependencies = [
     "boto3==1.34.0",
     "pydantic==2.11.9",
     "python-jose[cryptography]==3.3.0",
-    "python-multipart==0.0.6",
-    "jinja2==3.1.2",
+    "python-multipart==0.0.12",
+    "jinja2==3.1.4",
     "aiofiles==23.2.1",
     "apscheduler==3.10.4",
 ]
@@ -50,9 +50,9 @@ lint = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/postgres-replication-manager"
-Repository = "https://github.com/your-org/postgres-replication-manager"
-Issues = "https://github.com/your-org/postgres-replication-manager/issues"
+Homepage = "https://github.com/ckdake/pgrepbot"
+Repository = "https://github.com/ckdake/pgrepbot"
+Issues = "https://github.com/ckdake/pgrepbot/issues"
 
 [project.scripts]
 pgrepman = "app.main:main"

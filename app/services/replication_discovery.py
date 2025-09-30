@@ -5,9 +5,7 @@ This module provides comprehensive replication topology discovery and monitoring
 for both logical and physical PostgreSQL replication streams.
 """
 
-import asyncio
 import logging
-import re
 from datetime import datetime
 from typing import Any
 
@@ -184,7 +182,8 @@ class ReplicationDiscoveryService:
                         )
                         discovered_streams.append(stream)
                         logger.info(
-                            f"Discovered logical replication: {subscription.publication_name} -> {subscription.subscription_name}"
+                            f"Discovered logical replication: {subscription.publication_name} -> "
+                            f"{subscription.subscription_name}"
                         )
 
             logger.info(f"Discovered {len(discovered_streams)} logical replication streams")
@@ -197,7 +196,7 @@ class ReplicationDiscoveryService:
     async def _discover_publications(self, db_id: str) -> list[LogicalReplicationInfo]:
         """Discover publications on a database."""
         query = """
-        SELECT 
+        SELECT
             p.pubname,
             p.puballtables,
             p.pubinsert,
@@ -220,7 +219,9 @@ class ReplicationDiscoveryService:
                     publication_name=row["pubname"],
                     status="active",
                     total_tables=len(row["tables"]) if not row["puballtables"] else await self._count_all_tables(db_id),
-                    synced_tables=len(row["tables"]) if not row["puballtables"] else await self._count_all_tables(db_id),
+                    synced_tables=(
+                        len(row["tables"]) if not row["puballtables"] else await self._count_all_tables(db_id)
+                    ),
                 )
                 publications.append(publication)
 
@@ -233,7 +234,7 @@ class ReplicationDiscoveryService:
     async def _discover_subscriptions(self, db_id: str) -> list[LogicalReplicationInfo]:
         """Discover subscriptions on a database."""
         query = """
-        SELECT 
+        SELECT
             s.subname,
             s.subenabled,
             s.subconninfo,
@@ -306,11 +307,14 @@ class ReplicationDiscoveryService:
                 if db.role == "primary":
                     try:
                         physical_replicas = await self._discover_physical_replicas(db.id)
-                        
+
                         for replica_info in physical_replicas:
                             # Skip logical replication streams (they have subscription names)
                             if replica_info.application_name and "subscription" in replica_info.application_name:
-                                logger.debug(f"Skipping logical replication stream {replica_info.application_name} in physical discovery")
+                                logger.debug(
+                                    f"Skipping logical replication stream {replica_info.application_name} "
+                                    f"in physical discovery"
+                                )
                                 continue
 
                             # Try to match with configured replica databases
@@ -318,8 +322,9 @@ class ReplicationDiscoveryService:
                             for replica_db in databases:
                                 if replica_db.role == "replica":
                                     # Match physical replication streams (walreceiver) to physical replica
-                                    if (replica_info.application_name == "walreceiver" and 
-                                        replica_db.port == 5434):  # Physical replica port
+                                    if (
+                                        replica_info.application_name == "walreceiver" and replica_db.port == 5434
+                                    ):  # Physical replica port
                                         target_db_id = replica_db.id
                                         break
 
@@ -340,11 +345,13 @@ class ReplicationDiscoveryService:
                                 )
                                 discovered_streams.append(stream)
                                 logger.info(
-                                    f"Discovered physical replication: {db.name} -> {replica_info.client_addr} (matched to {target_db_id})"
+                                    f"Discovered physical replication: {db.name} -> {replica_info.client_addr} "
+                                    f"(matched to {target_db_id})"
                                 )
                             else:
                                 logger.warning(
-                                    f"Found physical replication from {replica_info.client_addr} but couldn't match to configured database"
+                                    f"Found physical replication from {replica_info.client_addr} but couldn't "
+                                    f"match to configured database"
                                 )
 
                     except Exception as e:
@@ -368,7 +375,7 @@ class ReplicationDiscoveryService:
     async def _discover_physical_replicas(self, db_id: str) -> list[PhysicalReplicationInfo]:
         """Discover physical replicas from pg_stat_replication."""
         query = """
-        SELECT 
+        SELECT
             pid,
             usename,
             application_name,
@@ -436,7 +443,7 @@ class ReplicationDiscoveryService:
             return []
 
         rds_streams = []
-        
+
         try:
             # Get RDS instances for configured databases
             for db in databases:
@@ -483,7 +490,7 @@ class ReplicationDiscoveryService:
             raise ReplicationDiscoveryError("Subscription name required for logical replication metrics")
 
         query = """
-        SELECT 
+        SELECT
             ss.received_lsn,
             ss.last_msg_send_time,
             ss.last_msg_receipt_time,
@@ -495,13 +502,13 @@ class ReplicationDiscoveryService:
         LEFT JOIN pg_stat_subscription ss ON s.oid = ss.subid
         LEFT JOIN pg_subscription_rel sr ON s.oid = sr.srsubid AND sr.srsubstate = 'r'
         WHERE s.subname = $1
-        GROUP BY s.oid, ss.received_lsn, ss.last_msg_send_time, ss.last_msg_receipt_time, 
+        GROUP BY s.oid, ss.received_lsn, ss.last_msg_send_time, ss.last_msg_receipt_time,
                  ss.latest_end_lsn, ss.latest_end_time
         """
 
         try:
             results = await self.connection_manager.execute_query(stream.target_db_id, query, stream.subscription_name)
-            
+
             if not results:
                 raise ReplicationDiscoveryError(f"Subscription {stream.subscription_name} not found")
 
@@ -537,7 +544,7 @@ class ReplicationDiscoveryService:
             raise ReplicationDiscoveryError("WAL sender PID required for physical replication metrics")
 
         query = """
-        SELECT 
+        SELECT
             sent_lsn,
             write_lsn,
             flush_lsn,
@@ -552,7 +559,7 @@ class ReplicationDiscoveryService:
 
         try:
             results = await self.connection_manager.execute_query(stream.source_db_id, query, stream.wal_sender_pid)
-            
+
             if not results:
                 raise ReplicationDiscoveryError(f"WAL sender {stream.wal_sender_pid} not found")
 
@@ -574,7 +581,7 @@ class ReplicationDiscoveryService:
                 lag_seconds=lag_seconds,
                 wal_position=str(row["replay_lsn"]) if row["replay_lsn"] else "0/0",
                 synced_tables=0,  # Not applicable for physical replication
-                total_tables=0,   # Not applicable for physical replication
+                total_tables=0,  # Not applicable for physical replication
                 backfill_progress=None,
             )
 
@@ -608,11 +615,11 @@ class ReplicationDiscoveryService:
 
             lsn1_val = parse_lsn(lsn1)
             lsn2_val = parse_lsn(lsn2)
-            
+
             # If either LSN is invalid, return 0
             if lsn1_val == 0 or lsn2_val == 0:
                 return 0
-                
+
             return max(0, lsn1_val - lsn2_val)
 
         except (ValueError, IndexError):
@@ -623,7 +630,7 @@ class ReplicationDiscoveryService:
         """Count all user tables in database."""
         query = """
         SELECT COUNT(*) as table_count
-        FROM information_schema.tables 
+        FROM information_schema.tables
         WHERE table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
         AND table_type = 'BASE TABLE'
         """
@@ -657,7 +664,7 @@ class ReplicationDiscoveryService:
         # 4. Monitor pg_stat_subscription_stats for logical replication conflicts
 
         logger.info(f"Parsing replication errors for {db_id} (placeholder implementation)")
-        
+
         # Return empty list for now - this would be implemented based on
         # specific log file access patterns and error detection requirements
         return []
@@ -673,7 +680,7 @@ class ReplicationDiscoveryService:
             try:
                 # Check if database is already in connection manager
                 health = self.connection_manager.get_health_status(db.id)
-                if isinstance(health, dict) or (hasattr(health, 'is_healthy') and not health.is_healthy):
+                if isinstance(health, dict) or (hasattr(health, "is_healthy") and not health.is_healthy):
                     # Add database to connection manager
                     await self.connection_manager.add_database(
                         db_id=db.id,

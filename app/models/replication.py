@@ -102,7 +102,7 @@ class ReplicationMetrics(BaseModel):
         """Validate WAL position format (LSN)"""
         if not v:
             return "0/0"
-        
+
         # If it's a decimal number, convert it to LSN format
         if v.isdigit():
             # Convert decimal to LSN format (simplified)
@@ -110,9 +110,9 @@ class ReplicationMetrics(BaseModel):
             high = num >> 32
             low = num & 0xFFFFFFFF
             return f"{high:X}/{low:X}"
-        
+
         # If it's already in LSN format, validate it
         if "/" not in v:
             raise ValueError("WAL position must be in LSN format (e.g., 0/1234ABCD)")
-        
+
         return v

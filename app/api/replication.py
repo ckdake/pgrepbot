@@ -9,15 +9,15 @@ import logging
 from datetime import datetime
 from typing import Any
 
+import redis.asyncio as redis
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.dependencies import get_connection_manager, get_redis_client, get_rds_client
+from app.dependencies import get_connection_manager, get_rds_client, get_redis_client
 from app.models.database import DatabaseConfig
 from app.models.replication import ReplicationMetrics, ReplicationStream
 from app.services.postgres_connection import PostgreSQLConnectionManager
 from app.services.replication_discovery import ReplicationDiscoveryService
-import redis.asyncio as redis
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class ReplicationMetricsResponse(BaseModel):
 async def discover_replication_topology(
     connection_manager: PostgreSQLConnectionManager = Depends(get_connection_manager),
     redis_client: redis.Redis = Depends(get_redis_client),
-    rds_client = Depends(get_rds_client),
+    rds_client=Depends(get_rds_client),
 ) -> ReplicationDiscoveryResponse:
     """
     Discover all replication streams across configured databases.
@@ -137,7 +137,7 @@ async def discover_replication_topology(
 async def get_replication_topology(
     connection_manager: PostgreSQLConnectionManager = Depends(get_connection_manager),
     redis_client: redis.Redis = Depends(get_redis_client),
-    rds_client = Depends(get_rds_client),
+    rds_client=Depends(get_rds_client),
 ) -> ReplicationTopologyResponse:
     """
     Get complete replication topology with current metrics.
@@ -194,7 +194,7 @@ async def get_stream_metrics(
     stream_id: str,
     connection_manager: PostgreSQLConnectionManager = Depends(get_connection_manager),
     redis_client: redis.Redis = Depends(get_redis_client),
-    rds_client = Depends(get_rds_client),
+    rds_client=Depends(get_rds_client),
 ) -> ReplicationMetricsResponse:
     """
     Get current metrics for a specific replication stream.
@@ -211,7 +211,7 @@ async def get_stream_metrics(
         # Get stream from cache
         streams = await _get_cached_streams(redis_client)
         stream = next((s for s in streams if s.id == stream_id), None)
-        
+
         if not stream:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -247,7 +247,7 @@ async def get_stream_metrics(
 async def refresh_replication_discovery(
     connection_manager: PostgreSQLConnectionManager = Depends(get_connection_manager),
     redis_client: redis.Redis = Depends(get_redis_client),
-    rds_client = Depends(get_rds_client),
+    rds_client=Depends(get_rds_client),
 ) -> dict[str, Any]:
     """
     Refresh replication discovery and update cached data.
@@ -389,7 +389,7 @@ def _build_topology_map(
     for stream in streams:
         # Get current metrics if available
         stream_metrics = metrics.get(stream.id)
-        
+
         edge = {
             "id": stream.id,
             "source": stream.source_db_id,
@@ -403,15 +403,19 @@ def _build_topology_map(
 
         # Add type-specific information
         if stream.type == "logical":
-            edge.update({
-                "publication_name": stream.publication_name,
-                "subscription_name": stream.subscription_name,
-            })
+            edge.update(
+                {
+                    "publication_name": stream.publication_name,
+                    "subscription_name": stream.subscription_name,
+                }
+            )
         else:
-            edge.update({
-                "replication_slot_name": stream.replication_slot_name,
-                "wal_sender_pid": stream.wal_sender_pid,
-            })
+            edge.update(
+                {
+                    "replication_slot_name": stream.replication_slot_name,
+                    "wal_sender_pid": stream.wal_sender_pid,
+                }
+            )
 
         edges.append(edge)
 

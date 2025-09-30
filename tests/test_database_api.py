@@ -84,10 +84,11 @@ class TestDatabaseAPI:
 
         data = response.json()
         assert "primary_database" in data
-        assert "replica_database" in data
+        assert "logical_replica_database" in data
+        assert "physical_replica_database" in data
 
         # Check structure of database credential test results
-        for db_key in ["primary_database", "replica_database"]:
+        for db_key in ["primary_database", "logical_replica_database", "physical_replica_database"]:
             db_data = data[db_key]
             assert "secret_name" in db_data
             assert "status" in db_data
