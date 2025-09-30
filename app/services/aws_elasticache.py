@@ -6,11 +6,12 @@ with connection pooling, error handling, and automatic failover support.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
-import redis
 import redis.asyncio as aioredis
-from redis.exceptions import ConnectionError, RedisError, TimeoutError
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import RedisError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class ElastiCacheError(Exception):
 class ElastiCacheManager:
     """
     ElastiCache Redis connection manager with pooling and error handling.
-    
+
     Provides high-level Redis operations with automatic connection management,
     pooling, and error recovery for ElastiCache clusters.
     """
@@ -33,7 +34,7 @@ class ElastiCacheManager:
         self,
         host: str = "localhost",
         port: int = 6379,
-        password: Optional[str] = None,
+        password: str | None = None,
         db: int = 0,
         max_connections: int = 10,
         socket_timeout: float = 5.0,
@@ -43,7 +44,7 @@ class ElastiCacheManager:
     ):
         """
         Initialize ElastiCache manager.
-        
+
         Args:
             host: Redis host (ElastiCache endpoint)
             port: Redis port
@@ -64,9 +65,9 @@ class ElastiCacheManager:
         self.socket_connect_timeout = socket_connect_timeout
         self.retry_on_timeout = retry_on_timeout
         self.health_check_interval = health_check_interval
-        
-        self._pool: Optional[aioredis.ConnectionPool] = None
-        self._redis: Optional[aioredis.Redis] = None
+
+        self._pool: aioredis.ConnectionPool | None = None
+        self._redis: aioredis.Redis | None = None
 
     async def _ensure_connection(self) -> aioredis.Redis:
         """Ensure Redis connection is established."""
@@ -84,24 +85,24 @@ class ElastiCacheManager:
                     retry_on_timeout=self.retry_on_timeout,
                     health_check_interval=self.health_check_interval,
                 )
-                
+
                 # Create Redis client
                 self._redis = aioredis.Redis(connection_pool=self._pool)
-                
+
                 # Test connection
                 await self._redis.ping()
                 logger.info(f"Successfully connected to Redis at {self.host}:{self.port}")
-                
+
             except Exception as e:
                 logger.error(f"Failed to connect to Redis at {self.host}:{self.port}: {e}")
                 raise ElastiCacheError(f"Failed to connect to Redis: {e}") from e
-        
+
         return self._redis
 
     async def ping(self) -> bool:
         """
         Test Redis connection.
-        
+
         Returns:
             True if connection is healthy, False otherwise
         """
@@ -113,16 +114,16 @@ class ElastiCacheManager:
             logger.warning(f"Redis ping failed: {e}")
             return False
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(self, key: str) -> str | None:
         """
         Get value from Redis.
-        
+
         Args:
             key: Redis key
-            
+
         Returns:
             Value as string, or None if key doesn't exist
-            
+
         Raises:
             ElastiCacheError: If operation fails
         """
@@ -130,7 +131,7 @@ class ElastiCacheManager:
             redis_client = await self._ensure_connection()
             value = await redis_client.get(key)
             return value.decode("utf-8") if value else None
-        except (ConnectionError, TimeoutError) as e:
+        except (RedisConnectionError, RedisTimeoutError) as e:
             logger.error(f"Redis connection error getting key {key}: {e}")
             raise ElastiCacheError(f"Connection error: {e}") from e
         except RedisError as e:
@@ -140,25 +141,19 @@ class ElastiCacheManager:
             logger.error(f"Unexpected error getting key {key}: {e}")
             raise ElastiCacheError(f"Unexpected error: {e}") from e
 
-    async def set(
-        self, 
-        key: str, 
-        value: str, 
-        ex: Optional[int] = None, 
-        nx: bool = False
-    ) -> bool:
+    async def set(self, key: str, value: str, ex: int | None = None, nx: bool = False) -> bool:
         """
         Set value in Redis.
-        
+
         Args:
             key: Redis key
             value: Value to set
             ex: Expiration time in seconds
             nx: Only set if key doesn't exist
-            
+
         Returns:
             True if operation succeeded
-            
+
         Raises:
             ElastiCacheError: If operation fails
         """
@@ -166,7 +161,7 @@ class ElastiCacheManager:
             redis_client = await self._ensure_connection()
             result = await redis_client.set(key, value, ex=ex, nx=nx)
             return result is True
-        except (ConnectionError, TimeoutError) as e:
+        except (RedisConnectionError, RedisTimeoutError) as e:
             logger.error(f"Redis connection error setting key {key}: {e}")
             raise ElastiCacheError(f"Connection error: {e}") from e
         except RedisError as e:
@@ -179,20 +174,20 @@ class ElastiCacheManager:
     async def delete(self, *keys: str) -> int:
         """
         Delete keys from Redis.
-        
+
         Args:
             keys: Keys to delete
-            
+
         Returns:
             Number of keys deleted
-            
+
         Raises:
             ElastiCacheError: If operation fails
         """
         try:
             redis_client = await self._ensure_connection()
             return await redis_client.delete(*keys)
-        except (ConnectionError, TimeoutError) as e:
+        except (RedisConnectionError, RedisTimeoutError) as e:
             logger.error(f"Redis connection error deleting keys {keys}: {e}")
             raise ElastiCacheError(f"Connection error: {e}") from e
         except RedisError as e:
@@ -205,20 +200,20 @@ class ElastiCacheManager:
     async def exists(self, *keys: str) -> int:
         """
         Check if keys exist in Redis.
-        
+
         Args:
             keys: Keys to check
-            
+
         Returns:
             Number of existing keys
-            
+
         Raises:
             ElastiCacheError: If operation fails
         """
         try:
             redis_client = await self._ensure_connection()
             return await redis_client.exists(*keys)
-        except (ConnectionError, TimeoutError) as e:
+        except (RedisConnectionError, RedisTimeoutError) as e:
             logger.error(f"Redis connection error checking keys {keys}: {e}")
             raise ElastiCacheError(f"Connection error: {e}") from e
         except RedisError as e:
@@ -228,20 +223,20 @@ class ElastiCacheManager:
             logger.error(f"Unexpected error checking keys {keys}: {e}")
             raise ElastiCacheError(f"Unexpected error: {e}") from e
 
-    async def get_info(self) -> Dict[str, Any]:
+    async def get_info(self) -> dict[str, Any]:
         """
         Get Redis server information.
-        
+
         Returns:
             Dictionary with Redis server info
-            
+
         Raises:
             ElastiCacheError: If operation fails
         """
         try:
             redis_client = await self._ensure_connection()
             info = await redis_client.info()
-            
+
             # Extract key metrics
             return {
                 "redis_version": info.get("redis_version"),
@@ -253,7 +248,7 @@ class ElastiCacheManager:
                 "keyspace_misses": info.get("keyspace_misses"),
                 "uptime_in_seconds": info.get("uptime_in_seconds"),
             }
-        except (ConnectionError, TimeoutError) as e:
+        except (RedisConnectionError, RedisTimeoutError) as e:
             logger.error(f"Redis connection error getting info: {e}")
             raise ElastiCacheError(f"Connection error: {e}") from e
         except RedisError as e:

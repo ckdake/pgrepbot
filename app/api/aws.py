@@ -7,12 +7,12 @@ integrations including Secrets Manager, ElastiCache, and RDS.
 
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from app.services.aws_elasticache import ElastiCacheError, ElastiCacheManager
+from app.services.aws_elasticache import ElastiCacheManager
 from app.services.aws_rds import RDSClient, RDSError
 from app.services.aws_secrets import SecretsManagerClient, SecretsManagerError
 
@@ -27,7 +27,7 @@ class AWSTestResponse(BaseModel):
     service: str
     status: str
     message: str
-    data: Dict[str, Any] = {}
+    data: dict[str, Any] = {}
     error: str = ""
 
 
@@ -44,30 +44,30 @@ class AWSIntegrationStatus(BaseModel):
 async def test_aws_integrations():
     """
     Test all AWS service integrations.
-    
+
     This endpoint tests connectivity and basic operations for:
     - AWS Secrets Manager
     - ElastiCache Redis
     - RDS service discovery
-    
+
     Returns comprehensive status information for all services.
     """
     logger.info("Testing AWS service integrations")
-    
+
     # Get configuration from environment
     aws_endpoint = os.getenv("AWS_ENDPOINT_URL")
     redis_host = os.getenv("REDIS_HOST", "localhost")
     redis_port = int(os.getenv("REDIS_PORT", "6379"))
-    
+
     # Test results
     secrets_result = await _test_secrets_manager(aws_endpoint)
     elasticache_result = await _test_elasticache(redis_host, redis_port)
     rds_result = await _test_rds(aws_endpoint)
-    
+
     # Determine overall status
     all_services = [secrets_result, elasticache_result, rds_result]
     overall_status = "healthy" if all(s.status == "healthy" for s in all_services) else "degraded"
-    
+
     return AWSIntegrationStatus(
         secrets_manager=secrets_result,
         elasticache=elasticache_result,
@@ -102,19 +102,19 @@ async def test_rds():
 async def get_secret(secret_name: str):
     """
     Retrieve a secret from AWS Secrets Manager.
-    
+
     Args:
         secret_name: Name or ARN of the secret to retrieve
-        
+
     Returns:
         Secret data (sensitive fields masked)
     """
     try:
         aws_endpoint = os.getenv("AWS_ENDPOINT_URL")
         secrets_client = SecretsManagerClient(endpoint_url=aws_endpoint)
-        
+
         secret_data = await secrets_client.get_secret(secret_name)
-        
+
         # Mask sensitive fields for API response
         masked_data = {}
         for key, value in secret_data.items():
@@ -122,13 +122,13 @@ async def get_secret(secret_name: str):
                 masked_data[key] = "***MASKED***"
             else:
                 masked_data[key] = value
-        
+
         return {
             "secret_name": secret_name,
             "data": masked_data,
             "cache_info": secrets_client.get_cache_info(),
         }
-        
+
     except SecretsManagerError as e:
         logger.error(f"Secrets Manager error retrieving {secret_name}: {e}")
         raise HTTPException(
@@ -149,13 +149,13 @@ async def list_rds_instances():
     try:
         aws_endpoint = os.getenv("AWS_ENDPOINT_URL")
         rds_client = RDSClient(endpoint_url=aws_endpoint)
-        
+
         instances = await rds_client.list_db_instances()
         return {
             "total_instances": len(instances),
             "instances": instances,
         }
-        
+
     except RDSError as e:
         logger.error(f"RDS error listing instances: {e}")
         raise HTTPException(
@@ -176,10 +176,10 @@ async def get_replication_topology():
     try:
         aws_endpoint = os.getenv("AWS_ENDPOINT_URL")
         rds_client = RDSClient(endpoint_url=aws_endpoint)
-        
+
         topology = await rds_client.discover_replication_topology()
         return topology
-        
+
     except RDSError as e:
         logger.error(f"RDS error discovering topology: {e}")
         raise HTTPException(
@@ -198,10 +198,10 @@ async def _test_secrets_manager(endpoint_url: str = None) -> AWSTestResponse:
     """Test Secrets Manager connectivity and operations."""
     try:
         secrets_client = SecretsManagerClient(endpoint_url=endpoint_url)
-        
+
         # Test basic connectivity by trying to get a test secret
         test_secret_name = "test/database/credentials"
-        
+
         try:
             # Try to get a test secret (this may fail if it doesn't exist)
             await secrets_client.get_secret(test_secret_name)
@@ -213,14 +213,14 @@ async def _test_secrets_manager(endpoint_url: str = None) -> AWSTestResponse:
                 data = {"note": "Connection test passed, no test secrets configured"}
             else:
                 raise e
-        
+
         return AWSTestResponse(
             service="secrets_manager",
             status="healthy",
             message=message,
             data=data,
         )
-        
+
     except Exception as e:
         logger.error(f"Secrets Manager test failed: {e}")
         return AWSTestResponse(
@@ -238,19 +238,19 @@ async def _test_elasticache(host: str, port: int) -> AWSTestResponse:
             # Test basic operations
             test_key = "aws_integration_test"
             test_value = "test_value_123"
-            
+
             # Test set operation
             await redis_manager.set(test_key, test_value, ex=60)
-            
+
             # Test get operation
             retrieved_value = await redis_manager.get(test_key)
-            
+
             # Test info operation
             info = await redis_manager.get_info()
-            
+
             # Clean up test key
             await redis_manager.delete(test_key)
-            
+
             if retrieved_value == test_value:
                 return AWSTestResponse(
                     service="elasticache",
@@ -270,7 +270,7 @@ async def _test_elasticache(host: str, port: int) -> AWSTestResponse:
                     message="Redis operations failed - data integrity issue",
                     error=f"Expected {test_value}, got {retrieved_value}",
                 )
-        
+
     except Exception as e:
         logger.error(f"ElastiCache test failed: {e}")
         return AWSTestResponse(
@@ -286,7 +286,7 @@ async def _test_rds(endpoint_url: str = None) -> AWSTestResponse:
     try:
         # Test direct PostgreSQL connections instead of LocalStack RDS
         import asyncpg
-        
+
         # Test connection to primary database
         primary_conn = None
         replica_conn = None
@@ -294,45 +294,35 @@ async def _test_rds(endpoint_url: str = None) -> AWSTestResponse:
         replica_status = "unhealthy"
         primary_version = None
         replica_version = None
-        
+
         try:
             # Connect to primary
             primary_conn = await asyncpg.connect(
-                host="localhost",
-                port=5432,
-                user="testuser",
-                password="testpass",
-                database="testdb",
-                command_timeout=5
+                host="localhost", port=5432, user="testuser", password="testpass", database="testdb", command_timeout=5
             )
             primary_version = await primary_conn.fetchval("SELECT version()")
             primary_status = "healthy"
-            
+
         except Exception as e:
             logger.warning(f"Primary PostgreSQL connection failed: {e}")
         finally:
             if primary_conn:
                 await primary_conn.close()
-        
+
         try:
             # Connect to replica
             replica_conn = await asyncpg.connect(
-                host="localhost",
-                port=5433,
-                user="testuser",
-                password="testpass",
-                database="testdb",
-                command_timeout=5
+                host="localhost", port=5433, user="testuser", password="testpass", database="testdb", command_timeout=5
             )
             replica_version = await replica_conn.fetchval("SELECT version()")
             replica_status = "healthy"
-            
+
         except Exception as e:
             logger.warning(f"Replica PostgreSQL connection failed: {e}")
         finally:
             if replica_conn:
                 await replica_conn.close()
-        
+
         # Determine overall status
         if primary_status == "healthy" and replica_status == "healthy":
             status = "healthy"
@@ -343,7 +333,7 @@ async def _test_rds(endpoint_url: str = None) -> AWSTestResponse:
         else:
             status = "unhealthy"
             message = "Failed to connect to PostgreSQL instances"
-        
+
         return AWSTestResponse(
             service="rds",
             status=status,
@@ -352,17 +342,17 @@ async def _test_rds(endpoint_url: str = None) -> AWSTestResponse:
                 "postgres_primary": {
                     "host": "localhost:5432",
                     "status": primary_status,
-                    "version": primary_version.split()[1] if primary_version else None
+                    "version": primary_version.split()[1] if primary_version else None,
                 },
                 "postgres_replica": {
-                    "host": "localhost:5433", 
+                    "host": "localhost:5433",
                     "status": replica_status,
-                    "version": replica_version.split()[1] if replica_version else None
+                    "version": replica_version.split()[1] if replica_version else None,
                 },
-                "note": "Direct PostgreSQL connections (Docker Compose setup)"
+                "note": "Direct PostgreSQL connections (Docker Compose setup)",
             },
         )
-        
+
     except Exception as e:
         logger.error(f"RDS test failed: {e}")
         return AWSTestResponse(

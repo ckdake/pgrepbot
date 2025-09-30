@@ -7,7 +7,7 @@ and physical replication topology using the AWS RDS API.
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
@@ -24,15 +24,15 @@ class RDSError(Exception):
 class RDSClient:
     """
     AWS RDS client for discovering physical replication topology and instance metadata.
-    
+
     Provides functionality to discover RDS instances, clusters, and their replication
     relationships for topology mapping and monitoring.
     """
 
-    def __init__(self, region_name: str = "us-east-1", endpoint_url: Optional[str] = None):
+    def __init__(self, region_name: str = "us-east-1", endpoint_url: str | None = None):
         """
         Initialize RDS client.
-        
+
         Args:
             region_name: AWS region name
             endpoint_url: Optional endpoint URL for LocalStack testing
@@ -56,20 +56,20 @@ class RDSClient:
                 raise RDSError(f"Failed to initialize RDS client: {e}") from e
         return self._client
 
-    async def list_db_instances(self) -> List[Dict[str, Any]]:
+    async def list_db_instances(self) -> list[dict[str, Any]]:
         """
         List all RDS database instances in the region.
-        
+
         Returns:
             List of database instance metadata dictionaries
-            
+
         Raises:
             RDSError: If listing instances fails
         """
         try:
             logger.info("Listing RDS database instances")
             response = self.client.describe_db_instances()
-            
+
             instances = []
             for db_instance in response["DBInstances"]:
                 instance_info = {
@@ -91,10 +91,10 @@ class RDSClient:
                     "instance_create_time": db_instance.get("InstanceCreateTime"),
                 }
                 instances.append(instance_info)
-            
+
             logger.info(f"Found {len(instances)} RDS instances")
             return instances
-            
+
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
             logger.error(f"AWS error listing RDS instances: {error_code}")
@@ -103,20 +103,20 @@ class RDSClient:
             logger.error(f"Unexpected error listing RDS instances: {e}")
             raise RDSError(f"Unexpected error listing instances: {e}") from e
 
-    async def list_db_clusters(self) -> List[Dict[str, Any]]:
+    async def list_db_clusters(self) -> list[dict[str, Any]]:
         """
         List all RDS database clusters in the region.
-        
+
         Returns:
             List of database cluster metadata dictionaries
-            
+
         Raises:
             RDSError: If listing clusters fails
         """
         try:
             logger.info("Listing RDS database clusters")
             response = self.client.describe_db_clusters()
-            
+
             clusters = []
             for db_cluster in response["DBClusters"]:
                 cluster_info = {
@@ -143,10 +143,10 @@ class RDSClient:
                     "availability_zones": db_cluster.get("AvailabilityZones", []),
                 }
                 clusters.append(cluster_info)
-            
+
             logger.info(f"Found {len(clusters)} RDS clusters")
             return clusters
-            
+
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
             logger.error(f"AWS error listing RDS clusters: {error_code}")
@@ -155,30 +155,28 @@ class RDSClient:
             logger.error(f"Unexpected error listing RDS clusters: {e}")
             raise RDSError(f"Unexpected error listing clusters: {e}") from e
 
-    async def get_db_instance(self, instance_identifier: str) -> Dict[str, Any]:
+    async def get_db_instance(self, instance_identifier: str) -> dict[str, Any]:
         """
         Get detailed information about a specific RDS instance.
-        
+
         Args:
             instance_identifier: RDS instance identifier
-            
+
         Returns:
             Dictionary with detailed instance information
-            
+
         Raises:
             RDSError: If getting instance info fails
         """
         try:
             logger.info(f"Getting RDS instance details for {instance_identifier}")
-            response = self.client.describe_db_instances(
-                DBInstanceIdentifier=instance_identifier
-            )
-            
+            response = self.client.describe_db_instances(DBInstanceIdentifier=instance_identifier)
+
             if not response["DBInstances"]:
                 raise RDSError(f"Instance {instance_identifier} not found")
-            
+
             db_instance = response["DBInstances"][0]
-            
+
             return {
                 "db_instance_identifier": db_instance["DBInstanceIdentifier"],
                 "db_instance_class": db_instance["DBInstanceClass"],
@@ -211,7 +209,7 @@ class RDSClient:
                     for pg in db_instance.get("DBParameterGroups", [])
                 ],
             }
-            
+
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
             if error_code == "DBInstanceNotFoundFault":
@@ -222,23 +220,23 @@ class RDSClient:
             logger.error(f"Unexpected error getting RDS instance {instance_identifier}: {e}")
             raise RDSError(f"Unexpected error getting instance: {e}") from e
 
-    async def discover_replication_topology(self) -> Dict[str, Any]:
+    async def discover_replication_topology(self) -> dict[str, Any]:
         """
         Discover physical replication topology across RDS instances and clusters.
-        
+
         Returns:
             Dictionary containing replication topology information
-            
+
         Raises:
             RDSError: If topology discovery fails
         """
         try:
             logger.info("Discovering RDS replication topology")
-            
+
             # Get all instances and clusters
             instances = await self.list_db_instances()
             clusters = await self.list_db_clusters()
-            
+
             # Build replication relationships
             replication_topology = {
                 "discovery_time": datetime.now().isoformat(),
@@ -249,11 +247,11 @@ class RDSClient:
                 "clusters": [],
                 "replication_chains": [],
             }
-            
+
             # Process instances
             primary_instances = []
             read_replicas = []
-            
+
             for instance in instances:
                 if instance["read_replica_source"]:
                     # This is a read replica
@@ -278,7 +276,7 @@ class RDSClient:
                         "multi_az": instance["multi_az"],
                     }
                     primary_instances.append(primary_info)
-            
+
             # Process clusters
             cluster_info = []
             for cluster in clusters:
@@ -292,7 +290,7 @@ class RDSClient:
                     "availability_zones": cluster["availability_zones"],
                 }
                 cluster_info.append(cluster_data)
-            
+
             # Build replication chains
             replication_chains = []
             for primary in primary_instances:
@@ -303,61 +301,59 @@ class RDSClient:
                         "chain_length": len(primary["read_replicas"]),
                     }
                     replication_chains.append(chain)
-            
-            replication_topology.update({
-                "primary_instances": primary_instances,
-                "read_replicas": read_replicas,
-                "clusters": cluster_info,
-                "replication_chains": replication_chains,
-            })
-            
+
+            replication_topology.update(
+                {
+                    "primary_instances": primary_instances,
+                    "read_replicas": read_replicas,
+                    "clusters": cluster_info,
+                    "replication_chains": replication_chains,
+                }
+            )
+
             logger.info(
                 f"Discovered topology: {len(primary_instances)} primaries, "
                 f"{len(read_replicas)} replicas, {len(clusters)} clusters"
             )
-            
+
             return replication_topology
-            
+
         except Exception as e:
             logger.error(f"Error discovering replication topology: {e}")
             raise RDSError(f"Error discovering topology: {e}") from e
 
     async def generate_auth_token(
-        self, 
-        db_hostname: str, 
-        port: int, 
-        db_username: str, 
-        region: Optional[str] = None
+        self, db_hostname: str, port: int, db_username: str, region: str | None = None
     ) -> str:
         """
         Generate IAM authentication token for RDS connection.
-        
+
         Args:
             db_hostname: RDS instance hostname
             port: Database port
             db_username: Database username
             region: AWS region (uses client region if not specified)
-            
+
         Returns:
             IAM authentication token
-            
+
         Raises:
             RDSError: If token generation fails
         """
         try:
             region = region or self.region_name
             logger.info(f"Generating IAM auth token for {db_username}@{db_hostname}:{port}")
-            
+
             token = self.client.generate_db_auth_token(
                 DBHostname=db_hostname,
                 Port=port,
                 DBUsername=db_username,
                 Region=region,
             )
-            
+
             logger.info("Successfully generated IAM auth token")
             return token
-            
+
         except ClientError as e:
             error_code = e.response["Error"]["Code"]
             logger.error(f"AWS error generating auth token: {error_code}")
