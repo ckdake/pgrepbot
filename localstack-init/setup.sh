@@ -52,7 +52,7 @@ create_secret_with_retry \
 
 create_secret_with_retry \
     "test/postgres/primary" \
-    '{"username":"testuser","password":"testpass","host":"localhost","port":5432,"dbname":"testdb"}'
+    '{"username":"testuser","password":"testpass","host":"postgres-primary","port":5432,"dbname":"testdb"}'
 
 # Verify secrets were created
 echo ""

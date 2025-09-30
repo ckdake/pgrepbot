@@ -100,11 +100,11 @@ jobs:
         # Create the test secrets that the tests expect
         awslocal secretsmanager create-secret \
           --name "test/postgres/primary" \
-          --secret-string '{"username":"testuser","password":"testpass","host":"localhost","port":5432,"dbname":"testdb"}' || true
+          --secret-string '{"username":"testuser","password":"testpass","host":"postgres-primary","port":5432,"dbname":"testdb"}' || true
         
         awslocal secretsmanager create-secret \
           --name "primary-db-creds" \
-          --secret-string '{"username":"testuser","password":"testpass","host":"localhost","port":5432,"dbname":"testdb"}' || true
+          --secret-string '{"username":"testuser","password":"testpass","host":"postgres-primary","port":5432,"dbname":"testdb"}' || true
         
         awslocal secretsmanager create-secret \
           --name "test/auth/admin" \
