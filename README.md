@@ -1,5 +1,10 @@
 # PostgreSQL Replication Manager
 
+[![CI](https://github.com/ckdake/pgrepbot/workflows/CI/badge.svg)](https://github.com/ckdake/pgrepbot/actions)
+[![codecov](https://codecov.io/gh/ckdake/pgrepbot/branch/main/graph/badge.svg)](https://codecov.io/gh/ckdake/pgrepbot)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A web-based tool for centralized management of PostgreSQL logical replication across multi-cloud environments (AWS, GCP) with support for monitoring physical replication streams.
 
 ## Features
@@ -16,7 +21,7 @@ A web-based tool for centralized management of PostgreSQL logical replication ac
 
 ### Prerequisites
 
-- Python 3.11+ installed
+- Python 3.13+ installed
 - Docker and Docker Compose installed
 - Make (recommended)
 
@@ -85,11 +90,11 @@ The system supports three authentication methods with automatic fallback:
 ## Development Status
 
 - ✅ **Task 1**: Project structure and development environment
-- ✅ **Task 2**: Core data models and validation
-- ⏳ **Task 3**: Authentication and authorization system
-- ⏳ **Task 4**: AWS service integration layer
-- ⏳ **Task 5**: PostgreSQL connection management
-- ⏳ **Task 6**: Replication discovery and monitoring
+- ✅ **Task 2**: Core data models and validation  
+- ✅ **Task 3**: Authentication and authorization system
+- ✅ **Task 4**: AWS service integration layer
+- ✅ **Task 5**: PostgreSQL connection management
+- ✅ **Task 6**: Replication discovery and monitoring core
 - ⏳ **Task 7**: Replication stream management
 - ⏳ **Task 8**: Schema migration execution
 - ⏳ **Task 9**: Web application foundation
@@ -98,9 +103,44 @@ The system supports three authentication methods with automatic fallback:
 - ⏳ **Task 12**: Deployment configuration
 - ⏳ **Task 13**: Comprehensive testing
 
+### Current Features (Tasks 1-6 Complete)
+
+🎉 **Working Features:**
+- **Multi-method Authentication**: IAM Identity Center, Secrets Manager, and Auth Key support
+- **AWS Integration**: LocalStack development environment with Secrets Manager, ElastiCache, RDS
+- **Database Connection Management**: Async PostgreSQL connections with health monitoring
+- **Replication Discovery**: Automatic discovery of both logical and physical replication streams
+- **Three-Database Test Environment**: Primary + Logical Replica + Physical Replica
+- **REST API**: Complete API endpoints for database and replication management
+- **Web Interface**: Basic web UI with authentication and status monitoring
+
+🔧 **Test Environment:**
+- Primary Database (5432): Hosts publications and serves both replicas
+- Logical Replica (5433): Subscribes to publications for logical replication  
+- Physical Replica (5434): Streams WAL from primary for physical replication
+- Both replication types active with real-time lag monitoring
+
+## CI/CD Pipeline
+
+This project includes automated GitHub Actions workflows:
+
+- **Lint**: Code quality checks with Ruff (formatting and linting)
+- **Test**: Unit and integration tests with coverage reporting
+- **Build**: Docker image build verification
+
+All checks must pass before merging pull requests.
+
 ## Contributing
 
 This project follows a spec-driven development approach. See the `.kiro/specs/postgres-replication-manager/` directory for detailed requirements, design, and implementation tasks.
+
+### Development Workflow
+
+1. Fork the repository
+2. Create a feature branch
+3. Make changes and ensure tests pass: `make test`
+4. Run linting: `make lint`
+5. Submit a pull request
 
 ## License
 
