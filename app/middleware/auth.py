@@ -25,6 +25,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             "/login",
             "/health",
             "/api/auth/login",
+            "/api/auth/methods",
             "/api/auth/oidc/authorize",
             "/api/auth/oidc/callback",
             "/docs",
