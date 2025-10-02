@@ -52,6 +52,49 @@ class ReplicationMetricsResponse(BaseModel):
     collected_at: str
 
 
+class CreateReplicationStreamRequest(BaseModel):
+    """Request model for creating a replication stream."""
+
+    source_db_id: str
+    target_db_id: str
+    publication_name: str
+    subscription_name: str
+    table_names: list[str] | None = None  # If None, replicate all tables
+    initial_sync: bool = True
+
+
+class CreateReplicationStreamResponse(BaseModel):
+    """Response model for creating a replication stream."""
+
+    success: bool
+    stream_id: str
+    message: str
+    created_at: str
+
+
+class ReplicationStreamStatusResponse(BaseModel):
+    """Response model for replication stream status."""
+
+    stream_id: str
+    status: str
+    lag_bytes: int
+    lag_seconds: float
+    last_sync_time: str | None
+    error_message: str | None
+    is_healthy: bool
+    checked_at: str
+
+
+class DestroyReplicationStreamResponse(BaseModel):
+    """Response model for destroying a replication stream."""
+
+    success: bool
+    message: str
+    destroyed_at: str
+    metrics: ReplicationMetrics
+    collected_at: str
+
+
 @router.get("/discover", response_model=ReplicationDiscoveryResponse)
 async def discover_replication_topology(
     connection_manager: PostgreSQLConnectionManager = Depends(get_connection_manager),
@@ -286,6 +329,217 @@ async def refresh_replication_discovery(
         ) from e
 
 
+@router.post("/create", response_model=CreateReplicationStreamResponse)
+async def create_replication_stream(
+    request: CreateReplicationStreamRequest,
+    connection_manager: PostgreSQLConnectionManager = Depends(get_connection_manager),
+    redis_client: redis.Redis = Depends(get_redis_client),
+) -> CreateReplicationStreamResponse:
+    """
+    Create a new logical replication stream.
+
+    This endpoint creates a publication on the source database and a subscription
+    on the target database to establish logical replication.
+
+    Args:
+        request: Replication stream creation parameters
+
+    Returns:
+        CreateReplicationStreamResponse: Creation results
+
+    Raises:
+        HTTPException: If stream creation fails
+    """
+    try:
+        logger.info(f"Creating replication stream: {request.source_db_id} -> {request.target_db_id}")
+
+        # Import here to avoid circular imports
+        from app.services.replication_management import ReplicationStreamManager
+
+        # Initialize stream manager
+        stream_manager = ReplicationStreamManager(connection_manager)
+
+        # Create the replication stream
+        stream = await stream_manager.create_logical_replication_stream(
+            source_db_id=request.source_db_id,
+            target_db_id=request.target_db_id,
+            publication_name=request.publication_name,
+            subscription_name=request.subscription_name,
+            table_names=request.table_names,
+            initial_sync=request.initial_sync,
+        )
+
+        # Cache the stream in Redis
+        await _cache_replication_stream(redis_client, stream)
+
+        return CreateReplicationStreamResponse(
+            success=True,
+            stream_id=stream.id,
+            message=(
+                f"Successfully created replication stream {request.publication_name} -> {request.subscription_name}"
+            ),
+            created_at=datetime.utcnow().isoformat(),
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to create replication stream: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create replication stream: {e}",
+        ) from e
+
+
+@router.get("/streams/{stream_id}/status", response_model=ReplicationStreamStatusResponse)
+async def get_replication_stream_status(
+    stream_id: str,
+    connection_manager: PostgreSQLConnectionManager = Depends(get_connection_manager),
+    redis_client: redis.Redis = Depends(get_redis_client),
+    rds_client=Depends(get_rds_client),
+) -> ReplicationStreamStatusResponse:
+    """
+    Get the current status of a replication stream.
+
+    This endpoint provides real-time status information about a specific
+    replication stream including lag metrics and health status.
+
+    Args:
+        stream_id: ID of the replication stream
+
+    Returns:
+        ReplicationStreamStatusResponse: Current stream status
+
+    Raises:
+        HTTPException: If stream not found or status check fails
+    """
+    try:
+        logger.info(f"Getting status for replication stream: {stream_id}")
+
+        # Get cached streams
+        streams = await _get_cached_streams(redis_client)
+        stream = next((s for s in streams if s.id == stream_id), None)
+
+        if not stream:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Replication stream {stream_id} not found",
+            )
+
+        # Get current metrics
+        discovery_service = ReplicationDiscoveryService(
+            connection_manager=connection_manager,
+            rds_client=rds_client,
+        )
+
+        try:
+            metrics = await discovery_service.collect_replication_metrics(stream)
+            is_healthy = True
+            error_message = None
+        except Exception as e:
+            logger.warning(f"Failed to collect metrics for stream {stream_id}: {e}")
+            metrics = None
+            is_healthy = False
+            error_message = str(e)
+
+        return ReplicationStreamStatusResponse(
+            stream_id=stream_id,
+            status=stream.status,
+            lag_bytes=metrics.lag_bytes if metrics else stream.lag_bytes,
+            lag_seconds=metrics.lag_seconds if metrics else stream.lag_seconds,
+            last_sync_time=stream.last_sync_time.isoformat() if stream.last_sync_time else None,
+            error_message=error_message,
+            is_healthy=is_healthy,
+            checked_at=datetime.utcnow().isoformat(),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get stream status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get stream status: {e}",
+        ) from e
+
+
+@router.delete("/streams/{stream_id}", response_model=DestroyReplicationStreamResponse)
+async def destroy_replication_stream(
+    stream_id: str,
+    connection_manager: PostgreSQLConnectionManager = Depends(get_connection_manager),
+    redis_client: redis.Redis = Depends(get_redis_client),
+) -> DestroyReplicationStreamResponse:
+    """
+    Destroy a replication stream.
+
+    This endpoint removes the subscription and publication to completely
+    tear down a logical replication stream.
+
+    Args:
+        stream_id: ID of the replication stream to destroy
+
+    Returns:
+        DestroyReplicationStreamResponse: Destruction results
+
+    Raises:
+        HTTPException: If stream not found or destruction fails
+    """
+    try:
+        logger.info(f"Destroying replication stream: {stream_id}")
+
+        # Get cached streams
+        streams = await _get_cached_streams(redis_client)
+        stream = next((s for s in streams if s.id == stream_id), None)
+
+        if not stream:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Replication stream {stream_id} not found",
+            )
+
+        if stream.type != "logical":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Can only destroy logical replication streams",
+            )
+
+        if not stream.is_managed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot destroy unmanaged replication streams",
+            )
+
+        # Import here to avoid circular imports
+        from app.services.replication_management import ReplicationStreamManager
+
+        # Initialize stream manager
+        stream_manager = ReplicationStreamManager(connection_manager)
+
+        # Destroy the replication stream
+        await stream_manager.destroy_logical_replication_stream(
+            source_db_id=stream.source_db_id,
+            target_db_id=stream.target_db_id,
+            publication_name=stream.publication_name,
+            subscription_name=stream.subscription_name,
+        )
+
+        # Remove from Redis cache
+        await _remove_cached_stream(redis_client, stream_id)
+
+        return DestroyReplicationStreamResponse(
+            success=True,
+            message=f"Successfully destroyed replication stream {stream_id}",
+            destroyed_at=datetime.utcnow().isoformat(),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to destroy replication stream: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to destroy replication stream: {e}",
+        ) from e
+
+
 async def _get_configured_databases(redis_client: redis.Redis) -> list[DatabaseConfig]:
     """Get configured databases from Redis cache."""
     try:
@@ -430,3 +684,25 @@ def _build_topology_map(
             "active_streams": len([s for s in streams if s.status == "active"]),
         },
     }
+
+
+async def _cache_replication_stream(redis_client: redis.Redis, stream: ReplicationStream) -> None:
+    """Cache a replication stream in Redis."""
+    try:
+        key = f"replication_stream:{stream.id}"
+        value = stream.model_dump_json()
+        # Cache for 1 hour
+        await redis_client.setex(key, 3600, value)
+        logger.debug(f"Cached replication stream {stream.id}")
+    except Exception as e:
+        logger.warning(f"Failed to cache replication stream {stream.id}: {e}")
+
+
+async def _remove_cached_stream(redis_client: redis.Redis, stream_id: str) -> None:
+    """Remove a replication stream from Redis cache."""
+    try:
+        key = f"replication_stream:{stream_id}"
+        await redis_client.delete(key)
+        logger.debug(f"Removed cached replication stream {stream_id}")
+    except Exception as e:
+        logger.warning(f"Failed to remove cached replication stream {stream_id}: {e}")

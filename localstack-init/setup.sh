@@ -6,51 +6,61 @@ echo "Setting up LocalStack services for PostgreSQL Replication Manager..."
 echo "Waiting for LocalStack to be ready..."
 sleep 15
 
-# Function to create secret with retry
-create_secret_with_retry() {
+# Function to create or update secret with retry
+create_or_update_secret() {
     local name=$1
     local secret_string=$2
     local max_attempts=3
     local attempt=1
     
     while [[ "${attempt}" -le "${max_attempts}" ]]; do
-        echo "Creating secret ${name} (attempt ${attempt}/${max_attempts})..."
+        echo "Creating/updating secret ${name} (attempt ${attempt}/${max_attempts})..."
+        
+        # Try to create the secret first
         if awslocal secretsmanager create-secret \
             --name "${name}" \
             --secret-string "${secret_string}" 2>/dev/null; then
             echo "✅ Successfully created secret: ${name}"
             return 0
         else
-            echo "⚠️  Failed to create secret ${name}, retrying..."
-            sleep 2
-            ((attempt++))
+            # If create fails, try to update existing secret
+            if awslocal secretsmanager update-secret \
+                --secret-id "${name}" \
+                --secret-string "${secret_string}" 2>/dev/null; then
+                echo "✅ Successfully updated secret: ${name}"
+                return 0
+            else
+                echo "⚠️  Failed to create/update secret ${name}, retrying..."
+                sleep 2
+                ((attempt++))
+            fi
         fi
     done
     
-    echo "❌ Failed to create secret ${name} after ${max_attempts} attempts"
+    echo "❌ Failed to create/update secret ${name} after ${max_attempts} attempts"
     return 1
 }
 
 # Create test secrets in Secrets Manager
 echo "Creating test secrets..."
 
-create_secret_with_retry \
+create_or_update_secret \
     "primary-db-creds" \
     '{"username":"testuser","password":"testpass","host":"localhost","port":5432,"dbname":"testdb"}'
 
-create_secret_with_retry \
+create_or_update_secret \
     "replica-db-creds" \
     '{"username":"testuser","password":"testpass","host":"localhost","port":5433,"dbname":"testdb"}'
 
-create_secret_with_retry \
+create_or_update_secret \
     "physical-replica-db-creds" \
     '{"username":"testuser","password":"testpass","host":"localhost","port":5434,"dbname":"testdb"}'
 
-create_secret_with_retry \
+create_or_update_secret \
     "test/auth/admin" \
     '{"username":"admin","password":"admin123"}'
 
-create_secret_with_retry \
+create_or_update_secret \
     "test/postgres/primary" \
     '{"username":"testuser","password":"testpass","host":"postgres-primary","port":5432,"dbname":"testdb"}'
 

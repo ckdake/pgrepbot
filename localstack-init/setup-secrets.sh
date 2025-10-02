@@ -10,7 +10,7 @@ awslocal secretsmanager create-secret \
   --secret-string '{
     "username": "testuser",
     "password": "testpass",
-    "host": "postgres-primary",
+    "host": "localhost",
     "port": 5432,
     "dbname": "testdb"
   }'
@@ -22,11 +22,24 @@ awslocal secretsmanager create-secret \
   --secret-string '{
     "username": "testuser", 
     "password": "testpass",
-    "host": "postgres-replica",
-    "port": 5432,
+    "host": "localhost",
+    "port": 5433,
+    "dbname": "testdb"
+  }'
+
+# Create physical replica database credentials secret
+awslocal secretsmanager create-secret \
+  --name "physical-replica-db-creds" \
+  --description "Physical replica database credentials for replication testing" \
+  --secret-string '{
+    "username": "testuser",
+    "password": "testpass", 
+    "host": "localhost",
+    "port": 5434,
     "dbname": "testdb"
   }'
 
 echo "✅ Secrets Manager secrets created successfully"
 echo "   - primary-db-creds: Primary database credentials"
 echo "   - replica-db-creds: Replica database credentials"
+echo "   - physical-replica-db-creds: Physical replica database credentials"

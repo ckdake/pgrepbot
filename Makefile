@@ -1,32 +1,29 @@
-.PHONY: help setup dev-services dev-services-stop run test lint lint-fix build clean status
+.PHONY: help setup start stop clean run test lint lint-fix build status
 
 # Default target
 help:
 	@echo "PostgreSQL Replication Manager - Development Commands"
 	@echo ""
-	@echo "� Quikck Start:"
-	@echo "  make setup       - Set up local development environment (first time only)"
-	@echo "  make dev-services - Start supporting services (LocalStack, Redis, PostgreSQL)"
-	@echo "  make run         - Run the application locally"
-	@echo "  make test        - Run the test suite with coverage"
-	@echo "  make lint        - Run comprehensive linting (Python, Shell, Docker, Markdown)"
+	@echo "🚀 Simple Operations:"
+	@echo "  make setup       - Set up development environment (first time only)"
+	@echo "  make start       - Start all services and application"
+	@echo "  make stop        - Stop all services"
+	@echo "  make clean       - Clean up everything and start fresh"
+	@echo ""
+	@echo "🔧 Development:"
+	@echo "  make run         - Run application only (services must be started)"
+	@echo "  make validate    - Validate all services and application are working"
+	@echo "  make test        - Run test suite with coverage"
+	@echo "  make lint        - Run code quality checks"
 	@echo ""
 	@echo "📦 Production:"
 	@echo "  make build       - Build production Docker image"
-	@echo "  make clean       - Clean up Docker resources"
 	@echo ""
-	@echo "🔧 Development workflow:"
-	@echo "  1. make setup           (first time setup)"
-	@echo "  2. source venv/bin/activate"
-	@echo "  3. make dev-services    (start services)"
-	@echo "  4. make run             (start app - in another terminal)"
-	@echo "  5. make test            (run tests with coverage)"
-	@echo "  6. make lint            (check code quality)"
-	@echo ""
-	@echo "After setup, the application will be available at:"
-	@echo "  http://localhost:8000 - Main application"
-	@echo "  http://localhost:8000/docs - API documentation"
-	@echo "  http://localhost:4566 - LocalStack dashboard"
+	@echo "🎯 Quick Start:"
+	@echo "  1. make setup    (first time only)"
+	@echo "  2. make start    (starts everything)"
+	@echo "  3. Visit http://localhost:8000"
+
 
 
 
@@ -44,10 +41,8 @@ setup:
 	@echo "✅ Setup complete!"
 	@echo ""
 	@echo "💡 Next steps:"
-	@echo "  1. source venv/bin/activate"
-
-	@echo "  3. make dev-services"
-	@echo "  4. make run"
+	@echo "  1. make dev-services"
+	@echo "  2. make run"
 
 # Start supporting services (LocalStack, Redis, PostgreSQL)
 dev-services:
@@ -82,11 +77,6 @@ run:
 		echo "❌ Virtual environment not found. Run 'make setup' first."; \
 		exit 1; \
 	fi
-	@if [ -z "$$VIRTUAL_ENV" ]; then \
-		echo "❌ Virtual environment not activated."; \
-		echo "💡 Run: source venv/bin/activate"; \
-		exit 1; \
-	fi
 	@echo "🚀 Starting PostgreSQL Replication Manager..."
 	@echo ""
 	@echo "🔧 AWS Integration Status:"
@@ -106,17 +96,12 @@ run:
 	export REDIS_PORT=6379 && \
 	export REDIS_URL=redis://localhost:6379 && \
 	export AUTH_KEY=dev-auth-key-12345 && \
-	python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+	./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Run tests locally
 test:
 	@if [ ! -d "venv" ]; then \
 		echo "❌ Virtual environment not found. Run 'make setup' first."; \
-		exit 1; \
-	fi
-	@if [ -z "$$VIRTUAL_ENV" ]; then \
-		echo "❌ Virtual environment not activated."; \
-		echo "💡 Run: source venv/bin/activate"; \
 		exit 1; \
 	fi
 	@echo "🧪 Running test suite with coverage..."
@@ -127,7 +112,7 @@ test:
 	export REDIS_HOST=localhost && \
 	export REDIS_PORT=6379 && \
 	export REDIS_URL=redis://localhost:6379 && \
-	python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=html
+	./venv/bin/python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=html
 	@echo ""
 	@echo "📊 Coverage report generated in htmlcov/index.html"
 
@@ -139,15 +124,10 @@ lint:
 		echo "❌ Virtual environment not found. Run 'make setup' first."; \
 		exit 1; \
 	fi
-	@if [ -z "$$VIRTUAL_ENV" ]; then \
-		echo "❌ Virtual environment not activated."; \
-		echo "💡 Run: source venv/bin/activate"; \
-		exit 1; \
-	fi
 	@echo "🔍 Running Python linting with ruff..."
-	@python -m ruff check app/ tests/
+	@./venv/bin/python -m ruff check app/ tests/
 	@echo "🎨 Running Python formatter check..."
-	@python -m ruff format --check app/ tests/
+	@./venv/bin/python -m ruff format --check app/ tests/
 	@echo "🐚 Running shell script linting..."
 	@find . -name "*.sh" -type f -not -path "./venv/*" -exec shellcheck {} + || echo "No shell scripts found"
 	@echo "🐳 Running Dockerfile linting..."
@@ -165,14 +145,9 @@ lint-fix:
 		echo "❌ Virtual environment not found. Run 'make setup' first."; \
 		exit 1; \
 	fi
-	@if [ -z "$$VIRTUAL_ENV" ]; then \
-		echo "❌ Virtual environment not activated."; \
-		echo "💡 Run: source venv/bin/activate"; \
-		exit 1; \
-	fi
 	@echo "🔧 Fixing Python linting issues..."
-	@python -m ruff check --fix app/ tests/
-	@python -m ruff format app/ tests/
+	@./venv/bin/python -m ruff check --fix app/ tests/
+	@./venv/bin/python -m ruff format app/ tests/
 	@echo "📝 Fixing Markdown formatting..."
 	@find . -name "*.md" -type f -not -path "./venv/*" -not -path "./.pytest_cache/*" -not -path "./.ruff_cache/*" -not -path "./htmlcov/*" -exec pymarkdown fix {} + || echo "No Markdown files found"
 
@@ -191,3 +166,11 @@ clean:
 status:
 	@echo "📊 Service Status:"
 	@docker-compose -f docker-compose.services.yml ps
+
+# Validate all services and application
+validate:
+	@if [ ! -d "venv" ]; then \
+		echo "❌ Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@./venv/bin/python scripts/validate.py
