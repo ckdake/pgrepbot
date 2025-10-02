@@ -2,13 +2,15 @@
 PostgreSQL Replication Manager - Main FastAPI Application
 """
 
-from fastapi import FastAPI, Request, Depends
+import os
+
+import redis.asyncio as redis
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.api import auth, aws, databases, database_config, migrations, models_test, replication
-from app.dependencies import get_redis_client
+from app.api import auth, aws, database_config, databases, migrations, models_test, replication
 from app.middleware.auth import AuthenticationMiddleware, get_current_user_optional
 from app.models.auth import User
 
@@ -25,13 +27,8 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 # Add authentication middleware
-import redis.asyncio as redis
-import os
 
-redis_client = redis.Redis.from_url(
-    os.getenv("REDIS_URL", "redis://localhost:6379"),
-    decode_responses=True
-)
+redis_client = redis.Redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
 app.add_middleware(AuthenticationMiddleware, redis_client=redis_client)
 
 # Include API routers
@@ -56,11 +53,8 @@ async def root(request: Request, user: User | None = Depends(get_current_user_op
     if not user:
         # Redirect to login if not authenticated
         return templates.TemplateResponse("login.html", {"request": request})
-    
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "user": user
-    })
+
+    return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -68,11 +62,8 @@ async def dashboard_page(request: Request, user: User | None = Depends(get_curre
     """Dashboard page"""
     if not user:
         return templates.TemplateResponse("login.html", {"request": request})
-    
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "user": user
-    })
+
+    return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
 
 
 @app.get("/health")

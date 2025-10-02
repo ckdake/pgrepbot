@@ -5,7 +5,6 @@ Provides CRUD operations for database configurations with authentication protect
 """
 
 import logging
-from typing import List
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -34,7 +33,7 @@ class DatabaseConfigListResponse(BaseModel):
 
     success: bool
     total_count: int
-    database_configs: List[DatabaseConfig]
+    database_configs: list[DatabaseConfig]
 
 
 class CreateDatabaseConfigRequest(BaseModel):
@@ -49,8 +48,8 @@ class CreateDatabaseConfigRequest(BaseModel):
     environment: str
     cloud_provider: str = "aws"
     vpc_id: str | None = None
-    subnet_ids: List[str] | None = None
-    security_group_ids: List[str] | None = None
+    subnet_ids: list[str] | None = None
+    security_group_ids: list[str] | None = None
     use_iam_auth: bool = False
 
 
@@ -66,8 +65,8 @@ class UpdateDatabaseConfigRequest(BaseModel):
     environment: str | None = None
     cloud_provider: str | None = None
     vpc_id: str | None = None
-    subnet_ids: List[str] | None = None
-    security_group_ids: List[str] | None = None
+    subnet_ids: list[str] | None = None
+    security_group_ids: list[str] | None = None
     use_iam_auth: bool | None = None
 
 
@@ -78,16 +77,16 @@ async def list_database_configs(
 ):
     """
     List all database configurations.
-    
+
     Requires authentication.
     """
     try:
         logger.info(f"User {user.username} listing database configurations")
-        
+
         # Get all database configuration keys from Redis
         pattern = "database:*"
         keys = await redis_client.keys(pattern)
-        
+
         database_configs = []
         for key in keys:
             try:
@@ -98,22 +97,22 @@ async def list_database_configs(
             except Exception as e:
                 logger.warning(f"Failed to parse database config from key {key}: {e}")
                 continue
-        
+
         # Sort by name
         database_configs.sort(key=lambda x: x.name)
-        
+
         return DatabaseConfigListResponse(
             success=True,
             total_count=len(database_configs),
             database_configs=database_configs,
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to list database configurations: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to list database configurations: {str(e)}",
-        )
+        ) from e
 
 
 @router.get("/{config_id}", response_model=DatabaseConfigResponse)
@@ -124,12 +123,12 @@ async def get_database_config(
 ):
     """
     Get a specific database configuration by ID.
-    
+
     Requires authentication.
     """
     try:
         logger.info(f"User {user.username} retrieving database configuration {config_id}")
-        
+
         # Get configuration from Redis
         config_json = await redis_client.get(f"database:{config_id}")
         if not config_json:
@@ -137,15 +136,15 @@ async def get_database_config(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Database configuration {config_id} not found",
             )
-        
+
         config = DatabaseConfig.model_validate_json(config_json)
-        
+
         return DatabaseConfigResponse(
             success=True,
             message="Database configuration retrieved successfully",
             database_config=config,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -153,7 +152,7 @@ async def get_database_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get database configuration: {str(e)}",
-        )
+        ) from e
 
 
 @router.post("/", response_model=DatabaseConfigResponse)
@@ -164,15 +163,15 @@ async def create_database_config(
 ):
     """
     Create a new database configuration.
-    
+
     Requires authentication.
     """
     try:
         logger.info(f"User {user.username} creating database configuration: {request.name}")
-        
+
         # Generate unique ID
         config_id = str(uuid4())
-        
+
         # Create database configuration
         config = DatabaseConfig(
             id=config_id,
@@ -189,28 +188,28 @@ async def create_database_config(
             security_group_ids=request.security_group_ids,
             use_iam_auth=request.use_iam_auth,
         )
-        
+
         # Store in Redis
         await redis_client.set(
             f"database:{config_id}",
             config.model_dump_json(),
             ex=86400,  # 24 hour TTL
         )
-        
+
         logger.info(f"Created database configuration {config_id} for user {user.username}")
-        
+
         return DatabaseConfigResponse(
             success=True,
             message="Database configuration created successfully",
             database_config=config,
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to create database configuration: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create database configuration: {str(e)}",
-        )
+        ) from e
 
 
 @router.put("/{config_id}", response_model=DatabaseConfigResponse)
@@ -222,12 +221,12 @@ async def update_database_config(
 ):
     """
     Update an existing database configuration.
-    
+
     Requires authentication.
     """
     try:
         logger.info(f"User {user.username} updating database configuration {config_id}")
-        
+
         # Get existing configuration
         config_json = await redis_client.get(f"database:{config_id}")
         if not config_json:
@@ -235,34 +234,35 @@ async def update_database_config(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Database configuration {config_id} not found",
             )
-        
+
         config = DatabaseConfig.model_validate_json(config_json)
-        
+
         # Update fields that were provided
         update_data = request.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             if hasattr(config, field):
                 setattr(config, field, value)
-        
+
         # Update timestamps
         from datetime import datetime
+
         config.updated_at = datetime.utcnow()
-        
+
         # Store updated configuration
         await redis_client.set(
             f"database:{config_id}",
             config.model_dump_json(),
             ex=86400,  # 24 hour TTL
         )
-        
+
         logger.info(f"Updated database configuration {config_id} for user {user.username}")
-        
+
         return DatabaseConfigResponse(
             success=True,
             message="Database configuration updated successfully",
             database_config=config,
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -270,7 +270,7 @@ async def update_database_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update database configuration: {str(e)}",
-        )
+        ) from e
 
 
 @router.delete("/{config_id}")
@@ -281,12 +281,12 @@ async def delete_database_config(
 ):
     """
     Delete a database configuration.
-    
+
     Requires authentication.
     """
     try:
         logger.info(f"User {user.username} deleting database configuration {config_id}")
-        
+
         # Check if configuration exists
         config_json = await redis_client.get(f"database:{config_id}")
         if not config_json:
@@ -294,17 +294,17 @@ async def delete_database_config(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Database configuration {config_id} not found",
             )
-        
+
         # Delete from Redis
         await redis_client.delete(f"database:{config_id}")
-        
+
         logger.info(f"Deleted database configuration {config_id} for user {user.username}")
-        
+
         return {
             "success": True,
             "message": "Database configuration deleted successfully",
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -312,7 +312,7 @@ async def delete_database_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete database configuration: {str(e)}",
-        )
+        ) from e
 
 
 @router.post("/{config_id}/test")
@@ -323,12 +323,12 @@ async def test_database_config(
 ):
     """
     Test connectivity to a database configuration.
-    
+
     Requires authentication.
     """
     try:
         logger.info(f"User {user.username} testing database configuration {config_id}")
-        
+
         # Get configuration
         config_json = await redis_client.get(f"database:{config_id}")
         if not config_json:
@@ -336,9 +336,9 @@ async def test_database_config(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Database configuration {config_id} not found",
             )
-        
+
         config = DatabaseConfig.model_validate_json(config_json)
-        
+
         # Test connection (placeholder - would integrate with actual connection manager)
         # For now, just return success
         return {
@@ -351,7 +351,7 @@ async def test_database_config(
                 "authentication": "success",
             },
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -359,4 +359,4 @@ async def test_database_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to test database configuration: {str(e)}",
-        )
+        ) from e

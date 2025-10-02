@@ -7,9 +7,7 @@ demonstrates the replication discovery functionality.
 """
 
 import asyncio
-import json
 import logging
-from datetime import datetime
 
 import redis.asyncio as redis
 
@@ -24,7 +22,7 @@ async def setup_test_databases():
     try:
         # Connect to Redis
         redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
-        
+
         # Test Redis connection
         await redis_client.ping()
         logger.info("Connected to Redis successfully")
@@ -76,19 +74,19 @@ async def setup_test_databases():
         await redis_client.set(
             f"database:{primary_db.id}",
             primary_db.model_dump_json(),
-            ex=3600  # 1 hour TTL
+            ex=3600,  # 1 hour TTL
         )
-        
+
         await redis_client.set(
             f"database:{replica_db.id}",
             replica_db.model_dump_json(),
-            ex=3600  # 1 hour TTL
+            ex=3600,  # 1 hour TTL
         )
-        
+
         await redis_client.set(
             f"database:{physical_replica_db.id}",
             physical_replica_db.model_dump_json(),
-            ex=3600  # 1 hour TTL
+            ex=3600,  # 1 hour TTL
         )
 
         logger.info("✅ Test database configurations stored in Redis")
@@ -101,9 +99,9 @@ async def setup_test_databases():
         # Close Redis connection
         await redis_client.aclose()
 
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("🎉 Test replication setup complete!")
-        print("="*60)
+        print("=" * 60)
         print("\nYou can now test replication discovery:")
         print("1. Start the application: make run")
         print("2. Visit: http://localhost:8000/api/replication/discover")

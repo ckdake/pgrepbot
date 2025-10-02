@@ -233,14 +233,7 @@ class TestRDSIntegration:
 class TestAWSIntegrationEndpoints:
     """Test AWS integration API endpoints."""
 
-    @pytest.fixture
-    def client(self):
-        """Create test client."""
-        from fastapi.testclient import TestClient
-
-        from app.main import app
-
-        return TestClient(app)
+    # Use the global client fixture from conftest.py
 
     def test_aws_test_endpoint(self, client):
         """Test the main AWS integration test endpoint."""

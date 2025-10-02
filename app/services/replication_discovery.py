@@ -611,7 +611,7 @@ class ReplicationDiscoveryService:
                     return lsn
                 if not isinstance(lsn, str):
                     return 0
-                
+
                 # Handle string LSN format
                 if "/" not in lsn:
                     # If it's just a number as string, convert it
@@ -619,7 +619,7 @@ class ReplicationDiscoveryService:
                         return int(lsn)
                     except ValueError:
                         return 0
-                
+
                 parts = lsn.split("/")
                 if len(parts) != 2:
                     return 0

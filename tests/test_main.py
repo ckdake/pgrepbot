@@ -2,14 +2,11 @@
 Basic tests for the main FastAPI application
 """
 
-from fastapi.testclient import TestClient
 
-from app.main import app
-
-client = TestClient(app)
+# Test client is provided by conftest.py fixture
 
 
-def test_root_endpoint():
+def test_root_endpoint(client):
     """Test the root endpoint returns HTML"""
     response = client.get("/")
     assert response.status_code == 200
@@ -17,7 +14,7 @@ def test_root_endpoint():
     assert "text/html" in response.headers["content-type"]
 
 
-def test_health_check():
+def test_health_check(client):
     """Test the health check endpoint"""
     response = client.get("/health")
     assert response.status_code == 200

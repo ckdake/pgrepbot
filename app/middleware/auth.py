@@ -31,7 +31,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             "/openapi.json",
             "/redoc",
         }
-        
+
         # Endpoints that should try authentication but not redirect on failure
         self.optional_auth_endpoints = {"/", "/dashboard"}
 
@@ -198,10 +198,10 @@ def get_current_user(request: Request) -> User:
 def get_current_user_optional(request: Request) -> User | None:
     """Get current authenticated user, or None if not authenticated"""
     user: User = getattr(request.state, "user", None)
-    
+
     if not user or not user.is_active:
         return None
-    
+
     return user
 
 

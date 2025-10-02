@@ -5,17 +5,9 @@ Tests for replication API endpoints.
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
 
-from app.main import app
 from app.models.database import DatabaseConfig
 from app.models.replication import ReplicationMetrics, ReplicationStream
-
-
-@pytest.fixture
-def client():
-    """Test client for FastAPI app."""
-    return TestClient(app)
 
 
 @pytest.fixture

@@ -7,9 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import Request
-from fastapi.testclient import TestClient
 
-from app.main import app
+# Test app is provided by conftest.py fixture
 from app.models.auth import AuthConfig, LoginRequest, User, UserSession
 from app.services.auth import AuthenticationService
 
@@ -197,29 +196,23 @@ class TestAuthenticationService:
 class TestAuthenticationAPI:
     """Test authentication API endpoints"""
 
-    def test_login_endpoint_exists(self):
+    def test_login_endpoint_exists(self, client):
         """Test that login endpoint exists"""
-        client = TestClient(app)
-
         # Test that the endpoint exists (even if it fails due to missing Redis)
         response = client.post("/api/auth/login", json={"auth_method": "auth_key", "auth_key": "test"})
 
         # Should not be 404 (endpoint exists)
         assert response.status_code != 404
 
-    def test_auth_methods_endpoint_exists(self):
+    def test_auth_methods_endpoint_exists(self, client):
         """Test that auth methods endpoint exists"""
-        client = TestClient(app)
-
         response = client.get("/api/auth/methods")
 
         # Should not be 404 (endpoint exists)
         assert response.status_code != 404
 
-    def test_login_page_exists(self):
+    def test_login_page_exists(self, client):
         """Test that login page exists"""
-        client = TestClient(app)
-
         response = client.get("/login")
 
         assert response.status_code == 200
@@ -237,10 +230,8 @@ class TestAuthenticationIntegration:
         # For now, we'll test the components individually
         pass
 
-    def test_login_page_renders(self):
+    def test_login_page_renders(self, client):
         """Test that login page renders correctly"""
-        client = TestClient(app)
-
         response = client.get("/login")
 
         assert response.status_code == 200

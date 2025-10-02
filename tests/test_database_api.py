@@ -5,18 +5,14 @@ Tests for database API endpoints.
 import os
 
 import pytest
-from fastapi.testclient import TestClient
 
-from app.main import app
+# Test app is provided by conftest.py fixture
 
 
 class TestDatabaseAPI:
     """Test database API endpoints."""
 
-    @pytest.fixture
-    def client(self):
-        """Create test client."""
-        return TestClient(app)
+    # Client fixture is provided by conftest.py
 
     @pytest.fixture(autouse=True)
     def setup_env(self):
