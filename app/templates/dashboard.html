@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - PostgreSQL Replication Manager{% endblock %}
+
+{% block content %}
+<div id="main-content">
+    <!-- Content will be loaded dynamically by JavaScript -->
+    <div class="text-center" style="padding: 4rem 0;">
+        <div class="spinner"></div>
+        <div class="mt-2">Loading dashboard...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Auto-load dashboard on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        if (window.replicationManager) {
+            window.replicationManager.navigateTo('dashboard');
+        }
+    });
+</script>
+{% endblock %}

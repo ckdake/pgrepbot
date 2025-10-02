@@ -2,11 +2,15 @@
 PostgreSQL Replication Manager - Main FastAPI Application
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.api import auth, aws, databases, models_test, replication
+from app.api import auth, aws, databases, database_config, migrations, models_test, replication
+from app.dependencies import get_redis_client
+from app.middleware.auth import AuthenticationMiddleware, get_current_user_optional
+from app.models.auth import User
 
 app = FastAPI(
     title="PostgreSQL Replication Manager",
@@ -14,114 +18,61 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Static files
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
 # Templates
 templates = Jinja2Templates(directory="app/templates")
+
+# Add authentication middleware
+import redis.asyncio as redis
+import os
+
+redis_client = redis.Redis.from_url(
+    os.getenv("REDIS_URL", "redis://localhost:6379"),
+    decode_responses=True
+)
+app.add_middleware(AuthenticationMiddleware, redis_client=redis_client)
 
 # Include API routers
 app.include_router(auth.router)
 app.include_router(models_test.router)
 app.include_router(aws.router)
 app.include_router(databases.router)
+app.include_router(database_config.router)
+app.include_router(migrations.router)
 app.include_router(replication.router)
 
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Login page"""
-    return templates.TemplateResponse(request, "login.html")
+    return templates.TemplateResponse("login.html", {"request": request})
 
 
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
-    """Root endpoint serving basic HTML interface"""
-    # Get user info if authenticated
-    user = getattr(request.state, "user", None)
+async def root(request: Request, user: User | None = Depends(get_current_user_optional)):
+    """Root endpoint serving the main web interface"""
+    if not user:
+        # Redirect to login if not authenticated
+        return templates.TemplateResponse("login.html", {"request": request})
+    
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "user": user
+    })
 
-    user_info = ""
-    if user:
-        user_info = f"""
-            <div class="user-info">
-                <h3>👤 Logged in as: {user.full_name or user.username}</h3>
-                <p>Authentication Method: {user.auth_method}</p>
-                <p>Roles: {", ".join(user.roles) if user.roles else "None"}</p>
-                <p>Admin: {"Yes" if user.is_admin else "No"}</p>
-                <a href="/api/auth/logout" style="color: #cc0000;">Logout</a>
-            </div>
-        """
 
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>PostgreSQL Replication Manager</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 40px; }}
-            .container {{ max-width: 800px; margin: 0 auto; }}
-            .status {{
-                background: #e8f5e8; padding: 20px;
-                border-radius: 5px; margin: 20px 0;
-            }}
-            .user-info {{
-                background: #e8f0ff; padding: 20px;
-                border-radius: 5px; margin: 20px 0;
-                border-left: 4px solid #0066cc;
-            }}
-            .nav {{
-                background: #f0f0f0; padding: 15px;
-                border-radius: 5px; margin: 20px 0;
-            }}
-            .nav a {{ margin-right: 15px; text-decoration: none; color: #0066cc; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>PostgreSQL Replication Manager</h1>
-
-            {user_info}
-
-            <div class="status">
-                <h3>✅ System Status: Running</h3>
-                <p>FastAPI application is running successfully on localhost:8000</p>
-                <p>LocalStack integration: Ready for development
-                   (Secrets Manager + IAM)</p>
-                <p>Redis: Direct connection available on port 6379</p>
-                <p>PostgreSQL: Primary (5432), Logical Replica (5433), and Physical Replica (5434) databases ready</p>
-            </div>
-
-            <div class="nav">
-                <h3>Available Endpoints:</h3>
-                <a href="/docs">API Documentation</a>
-                <a href="/health">Health Check</a>
-                <a href="/api/models/test">Model Validation Test</a>
-                <a href="/api/aws/test">AWS Integration Test</a>
-                <a href="/api/databases/test">Database Connection Test</a>
-                <a href="/api/replication/discover">Replication Discovery</a>
-                <a href="/api/auth/me">User Info</a>
-            </div>
-
-            <h3>Development Progress</h3>
-            <ul>
-                <li>✅ Task 1: Project structure and development environment</li>
-                <li>✅ Task 2: Core data models and validation</li>
-                <li>✅ Task 3: Authentication and authorization system</li>
-                <li>✅ Task 4: AWS service integration layer</li>
-                <li>✅ Task 5: PostgreSQL connection management system</li>
-                <li>🔄 Task 6: Replication discovery and monitoring core</li>
-            </ul>
-
-            <h3>Task 3 Features</h3>
-            <ul>
-                <li>✅ Multi-method authentication (IAM Identity Center, Secrets Manager, Auth Key)</li>
-                <li>✅ Session management with Redis storage</li>
-                <li>✅ Role-based access control</li>
-                <li>✅ Authentication middleware</li>
-                <li>✅ Login/logout web interface</li>
-                <li>✅ API endpoints for authentication</li>
-            </ul>
-        </div>
-    </body>
-    </html>
-    """
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_page(request: Request, user: User | None = Depends(get_current_user_optional)):
+    """Dashboard page"""
+    if not user:
+        return templates.TemplateResponse("login.html", {"request": request})
+    
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "user": user
+    })
 
 
 @app.get("/health")

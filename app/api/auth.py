@@ -36,7 +36,7 @@ async def login(
             key="session_id",
             value=login_response.session_id,
             httponly=True,
-            secure=True,  # Should be True in production with HTTPS
+            secure=False,  # False for development (HTTP), should be True in production with HTTPS
             samesite="lax",
             max_age=24 * 60 * 60,  # 24 hours
         )
@@ -116,7 +116,7 @@ async def oidc_callback(
             key="session_id",
             value=login_response.session_id,
             httponly=True,
-            secure=True,  # Should be True in production with HTTPS
+            secure=False,  # False for development (HTTP), should be True in production with HTTPS
             samesite="lax",
             max_age=24 * 60 * 60,  # 24 hours
         )

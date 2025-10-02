@@ -22,7 +22,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
 
         # Public endpoints that don't require authentication
         self.public_endpoints = {
-            "/",
+            "/login",
             "/health",
             "/api/auth/login",
             "/api/auth/oidc/authorize",
@@ -31,6 +31,9 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             "/openapi.json",
             "/redoc",
         }
+        
+        # Endpoints that should try authentication but not redirect on failure
+        self.optional_auth_endpoints = {"/", "/dashboard"}
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process request and handle authentication"""
@@ -45,6 +48,15 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
 
         # Try to authenticate the request
         user, session = await self._authenticate_request(request)
+
+        # Handle optional auth endpoints (like root)
+        if request.url.path in self.optional_auth_endpoints:
+            # Set user and session if available, but don't redirect if not
+            if user and session:
+                request.state.user = user
+                request.state.session = session
+                await self.auth_service.extend_session(session.session_id)
+            return await call_next(request)
 
         if not user or not session:
             # Return 401 for API endpoints, redirect for web interface
@@ -180,6 +192,16 @@ def get_current_user(request: Request) -> User:
             detail="Account is inactive",
         )
 
+    return user
+
+
+def get_current_user_optional(request: Request) -> User | None:
+    """Get current authenticated user, or None if not authenticated"""
+    user: User = getattr(request.state, "user", None)
+    
+    if not user or not user.is_active:
+        return None
+    
     return user
 
 

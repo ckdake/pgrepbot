@@ -3,6 +3,7 @@ Authentication service handling multiple authentication methods
 """
 
 import json
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta
@@ -20,6 +21,8 @@ from app.models.auth import (
     User,
     UserSession,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AuthenticationService:

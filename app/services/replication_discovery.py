@@ -567,8 +567,12 @@ class ReplicationDiscoveryService:
 
             # Calculate lag in bytes
             lag_bytes = 0
-            if row["sent_lsn"] and row["replay_lsn"]:
-                lag_bytes = self._calculate_lsn_diff(row["sent_lsn"], row["replay_lsn"])
+            if row["sent_lsn"] is not None and row["replay_lsn"] is not None:
+                try:
+                    lag_bytes = self._calculate_lsn_diff(row["sent_lsn"], row["replay_lsn"])
+                except Exception as e:
+                    logger.warning(f"Failed to calculate LSN diff: {e}")
+                    lag_bytes = 0
 
             # Calculate lag in seconds
             lag_seconds = 0.0
@@ -579,7 +583,7 @@ class ReplicationDiscoveryService:
                 stream_id=stream.id,
                 lag_bytes=lag_bytes,
                 lag_seconds=lag_seconds,
-                wal_position=str(row["replay_lsn"]) if row["replay_lsn"] else "0/0",
+                wal_position=str(row["replay_lsn"]) if row["replay_lsn"] is not None else "0/0",
                 synced_tables=0,  # Not applicable for physical replication
                 total_tables=0,  # Not applicable for physical replication
                 backfill_progress=None,
@@ -589,20 +593,33 @@ class ReplicationDiscoveryService:
             logger.error(f"Failed to collect physical metrics for WAL sender {stream.wal_sender_pid}: {e}")
             raise ReplicationDiscoveryError(f"Failed to collect physical metrics: {e}") from e
 
-    def _calculate_lsn_diff(self, lsn1: str, lsn2: str) -> int:
+    def _calculate_lsn_diff(self, lsn1: str | int, lsn2: str | int) -> int:
         """
         Calculate the difference between two PostgreSQL LSN positions.
 
         Args:
-            lsn1: First LSN (higher)
-            lsn2: Second LSN (lower)
+            lsn1: First LSN (higher) - can be string or int
+            lsn2: Second LSN (lower) - can be string or int
 
         Returns:
             Difference in bytes
         """
         try:
-            # Parse LSN format: XXXXXXXX/XXXXXXXX
-            def parse_lsn(lsn: str) -> int:
+            # Parse LSN format: XXXXXXXX/XXXXXXXX or handle integer values
+            def parse_lsn(lsn: str | int) -> int:
+                if isinstance(lsn, int):
+                    return lsn
+                if not isinstance(lsn, str):
+                    return 0
+                
+                # Handle string LSN format
+                if "/" not in lsn:
+                    # If it's just a number as string, convert it
+                    try:
+                        return int(lsn)
+                    except ValueError:
+                        return 0
+                
                 parts = lsn.split("/")
                 if len(parts) != 2:
                     return 0
