@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.testclient import TestClient
 
-from app.api import auth, aws, database_config, databases, migrations, models_test, replication
+from app.api import alerts, auth, aws, database_config, databases, migrations, models_test, replication
 
 
 @pytest.fixture
@@ -34,6 +34,7 @@ def test_app():
     app.include_router(database_config.router)
     app.include_router(migrations.router)
     app.include_router(replication.router)
+    app.include_router(alerts.router)
 
     @app.get("/", response_class=HTMLResponse)
     async def root():

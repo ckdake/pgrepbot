@@ -75,6 +75,9 @@ class ReplicationManager {
                 case 'migrations':
                     await this.loadMigrations();
                     break;
+                case 'alerts':
+                    await this.loadAlerts();
+                    break;
                 default:
                     contentArea.innerHTML = '<div class="card"><div class="card-body">Page not found</div></div>';
             }
@@ -1322,4 +1325,420 @@ window.addEventListener('popstate', (e) => {
     if (e.state && e.state.page) {
         window.replicationManager.navigateTo(e.state.page);
     }
-});
+}); 
+   async loadAlerts() {
+        const content = `
+            <h1 class="page-title">Alerts & Monitoring</h1>
+            
+            <div class="row">
+                <div class="col-4">
+                    <div class="card">
+                        <div class="card-header">System Health</div>
+                        <div class="card-body">
+                            <div id="system-health">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-4">
+                    <div class="card">
+                        <div class="card-header">Active Alerts</div>
+                        <div class="card-body">
+                            <div id="active-alerts-summary">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-4">
+                    <div class="card">
+                        <div class="card-header">Metrics Summary</div>
+                        <div class="card-body">
+                            <div id="metrics-summary">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Active Alerts</span>
+                        <div>
+                            <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.refreshAlerts()">
+                                🔄 Refresh
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="replicationManager.runMonitoringCycle()">
+                                ▶️ Run Check
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="active-alerts-table">Loading active alerts...</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Alert History</span>
+                        <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.showAlertThresholds()">
+                            ⚙️ Configure Thresholds
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="alert-history-table">Loading alert history...</div>
+                </div>
+            </div>
+
+            <!-- Alert Thresholds Modal -->
+            <div id="alert-thresholds-modal" class="modal" style="display: none;">
+                <div class="modal-content" style="max-width: 800px;">
+                    <div class="modal-header">
+                        <h3>Alert Thresholds Configuration</h3>
+                        <button class="btn-close" onclick="replicationManager.hideAlertThresholds()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="alert-thresholds-content">Loading...</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="replicationManager.hideAlertThresholds()">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('main-content').innerHTML = content;
+        
+        // Load alerts data
+        await this.loadAlertsData();
+    }
+
+    async loadAlertsData() {
+        try {
+            // Load system health
+            const healthResponse = await fetch('/api/alerts/health');
+            const healthData = await healthResponse.json();
+            this.renderSystemHealth(healthData);
+
+            // Load active alerts
+            const activeAlertsResponse = await fetch('/api/alerts/active');
+            const activeAlerts = await activeAlertsResponse.json();
+            this.renderActiveAlertsSummary(activeAlerts);
+            this.renderActiveAlertsTable(activeAlerts);
+
+            // Load alert history
+            const historyResponse = await fetch('/api/alerts/?limit=50');
+            const alertHistory = await historyResponse.json();
+            this.renderAlertHistoryTable(alertHistory);
+
+            // Load metrics summary
+            const metricsResponse = await fetch('/api/alerts/metrics/summary');
+            const metricsData = await metricsResponse.json();
+            this.renderMetricsSummary(metricsData);
+
+        } catch (error) {
+            console.error('Error loading alerts data:', error);
+            document.getElementById('system-health').innerHTML = `
+                <div class="status error">
+                    <span>⚠️</span>
+                    Error loading alerts: ${error.message}
+                </div>
+            `;
+        }
+    }
+
+    renderSystemHealth(health) {
+        const container = document.getElementById('system-health');
+        if (!container) return;
+
+        const statusIcon = {
+            'healthy': '✅',
+            'degraded': '⚠️',
+            'critical': '❌'
+        };
+
+        const statusClass = {
+            'healthy': 'healthy',
+            'degraded': 'warning',
+            'critical': 'error'
+        };
+
+        container.innerHTML = `
+            <div class="status ${statusClass[health.status]}">
+                <span>${statusIcon[health.status]}</span>
+                System ${health.status}
+            </div>
+            <div class="mt-2">
+                <small>
+                    Databases: ${health.healthy_databases}/${health.total_databases} healthy<br>
+                    Streams: ${health.healthy_streams}/${health.total_streams} active<br>
+                    Uptime: ${Math.floor(health.uptime_seconds / 3600)}h ${Math.floor((health.uptime_seconds % 3600) / 60)}m
+                </small>
+            </div>
+        `;
+    }
+
+    renderActiveAlertsSummary(alerts) {
+        const container = document.getElementById('active-alerts-summary');
+        if (!container) return;
+
+        const criticalAlerts = alerts.filter(a => a.severity === 'critical').length;
+        const warningAlerts = alerts.filter(a => a.severity === 'warning').length;
+
+        let statusClass = 'healthy';
+        let statusIcon = '✅';
+        let statusText = 'No active alerts';
+
+        if (criticalAlerts > 0) {
+            statusClass = 'error';
+            statusIcon = '❌';
+            statusText = `${criticalAlerts} critical alert${criticalAlerts > 1 ? 's' : ''}`;
+        } else if (warningAlerts > 0) {
+            statusClass = 'warning';
+            statusIcon = '⚠️';
+            statusText = `${warningAlerts} warning${warningAlerts > 1 ? 's' : ''}`;
+        }
+
+        container.innerHTML = `
+            <div class="status ${statusClass}">
+                <span>${statusIcon}</span>
+                ${statusText}
+            </div>
+            <div class="mt-2">
+                <small>
+                    Total: ${alerts.length} active alerts<br>
+                    Critical: ${criticalAlerts}, Warning: ${warningAlerts}
+                </small>
+            </div>
+        `;
+    }
+
+    renderActiveAlertsTable(alerts) {
+        const container = document.getElementById('active-alerts-table');
+        if (!container) return;
+
+        if (alerts.length === 0) {
+            container.innerHTML = '<div class="text-muted">No active alerts</div>';
+            return;
+        }
+
+        let html = `
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Title</th>
+                        <th>Message</th>
+                        <th>Triggered</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        alerts.forEach(alert => {
+            const severityIcon = {
+                'critical': '❌',
+                'warning': '⚠️',
+                'info': 'ℹ️'
+            };
+
+            const severityClass = {
+                'critical': 'error',
+                'warning': 'warning',
+                'info': 'info'
+            };
+
+            html += `
+                <tr>
+                    <td>
+                        <div class="status ${severityClass[alert.severity]}">
+                            ${severityIcon[alert.severity]} ${alert.severity}
+                        </div>
+                    </td>
+                    <td><strong>${alert.title}</strong></td>
+                    <td>${alert.message}</td>
+                    <td>${new Date(alert.triggered_at).toLocaleString()}</td>
+                    <td>
+                        <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.acknowledgeAlert('${alert.id}')">
+                            Acknowledge
+                        </button>
+                        <button class="btn btn-outline-success btn-sm" onclick="replicationManager.resolveAlert('${alert.id}')">
+                            Resolve
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    renderAlertHistoryTable(alerts) {
+        const container = document.getElementById('alert-history-table');
+        if (!container) return;
+
+        if (alerts.length === 0) {
+            container.innerHTML = '<div class="text-muted">No alert history</div>';
+            return;
+        }
+
+        let html = `
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Severity</th>
+                        <th>Title</th>
+                        <th>Triggered</th>
+                        <th>Resolved</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        alerts.slice(0, 20).forEach(alert => {
+            const statusIcon = {
+                'active': '🔴',
+                'acknowledged': '🟡',
+                'resolved': '🟢'
+            };
+
+            const severityIcon = {
+                'critical': '❌',
+                'warning': '⚠️',
+                'info': 'ℹ️'
+            };
+
+            html += `
+                <tr>
+                    <td>${statusIcon[alert.status]} ${alert.status}</td>
+                    <td>${severityIcon[alert.severity]} ${alert.severity}</td>
+                    <td>${alert.title}</td>
+                    <td>${new Date(alert.triggered_at).toLocaleString()}</td>
+                    <td>${alert.resolved_at ? new Date(alert.resolved_at).toLocaleString() : '-'}</td>
+                </tr>
+            `;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    renderMetricsSummary(metrics) {
+        const container = document.getElementById('metrics-summary');
+        if (!container) return;
+
+        container.innerHTML = `
+            <div class="status info">
+                <span>📊</span>
+                ${metrics.total_metrics} metrics collected
+            </div>
+            <div class="mt-2">
+                <small>
+                    Metric types: ${metrics.metric_types}<br>
+                    Last collection: ${metrics.collection_time ? new Date(metrics.collection_time).toLocaleTimeString() : 'Never'}
+                </small>
+            </div>
+        `;
+    }
+
+    async refreshAlerts() {
+        await this.loadAlertsData();
+    }
+
+    async runMonitoringCycle() {
+        try {
+            const response = await fetch('/api/alerts/test-monitoring', { method: 'POST' });
+            const result = await response.json();
+            
+            if (result.success) {
+                // Refresh alerts after running monitoring
+                setTimeout(() => this.refreshAlerts(), 1000);
+            }
+        } catch (error) {
+            console.error('Error running monitoring cycle:', error);
+        }
+    }
+
+    async acknowledgeAlert(alertId) {
+        try {
+            const response = await fetch(`/api/alerts/${alertId}/acknowledge`, { method: 'POST' });
+            const result = await response.json();
+            
+            if (result.success) {
+                await this.refreshAlerts();
+            }
+        } catch (error) {
+            console.error('Error acknowledging alert:', error);
+        }
+    }
+
+    async resolveAlert(alertId) {
+        const notes = prompt('Resolution notes (optional):');
+        
+        try {
+            const response = await fetch(`/api/alerts/${alertId}/resolve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notes: notes || '' })
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+                await this.refreshAlerts();
+            }
+        } catch (error) {
+            console.error('Error resolving alert:', error);
+        }
+    }
+
+    async showAlertThresholds() {
+        try {
+            const response = await fetch('/api/alerts/thresholds');
+            const thresholds = await response.json();
+            
+            let html = `
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Severity</th>
+                            <th>Metric</th>
+                            <th>Threshold</th>
+                            <th>Enabled</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            thresholds.forEach(threshold => {
+                html += `
+                    <tr>
+                        <td><strong>${threshold.name}</strong></td>
+                        <td>${threshold.alert_type}</td>
+                        <td>${threshold.severity}</td>
+                        <td>${threshold.metric_name}</td>
+                        <td>${threshold.comparison_operator} ${threshold.threshold_value}</td>
+                        <td>${threshold.enabled ? '✅' : '❌'}</td>
+                    </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            
+            document.getElementById('alert-thresholds-content').innerHTML = html;
+            document.getElementById('alert-thresholds-modal').style.display = 'block';
+            
+        } catch (error) {
+            console.error('Error loading alert thresholds:', error);
+        }
+    }
+
+    hideAlertThresholds() {
+        document.getElementById('alert-thresholds-modal').style.display = 'none';
+    }

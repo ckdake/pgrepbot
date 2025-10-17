@@ -10,9 +10,10 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.api import auth, aws, database_config, databases, migrations, models_test, replication
+from app.api import alerts, auth, aws, database_config, databases, migrations, models_test, replication
 from app.middleware.auth import AuthenticationMiddleware, get_current_user_optional
 from app.models.auth import User
+from app.services.background_tasks import start_background_tasks, stop_background_tasks
 
 app = FastAPI(
     title="PostgreSQL Replication Manager",
@@ -39,6 +40,7 @@ app.include_router(databases.router)
 app.include_router(database_config.router)
 app.include_router(migrations.router)
 app.include_router(replication.router)
+app.include_router(alerts.router)
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -74,6 +76,29 @@ async def health_check():
         "service": "postgres-replication-manager",
         "version": "1.0.0",
     }
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Application startup event"""
+    try:
+        await start_background_tasks(redis_client)
+    except Exception as e:
+        # Log error but don't fail startup
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to start background tasks: {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Application shutdown event"""
+    try:
+        await stop_background_tasks()
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to stop background tasks: {e}")
 
 
 if __name__ == "__main__":

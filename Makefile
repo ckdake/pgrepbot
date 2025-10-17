@@ -96,7 +96,7 @@ run:
 	export REDIS_PORT=6379 && \
 	export REDIS_URL=redis://localhost:6379 && \
 	export AUTH_KEY=dev-auth-key-12345 && \
-	./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+	./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app
 
 # Run tests locally
 test:

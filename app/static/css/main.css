@@ -490,4 +490,90 @@ body {
         width: 95%;
         margin: 1rem;
     }
+}/* A
+lert-specific styles */
+.status.error {
+    background: #fee;
+    color: #c33;
+    border: 1px solid #fcc;
+}
+
+.status.warning {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.status.info {
+    background: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+}
+
+.status.healthy {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.alert-severity-critical {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+.alert-severity-warning {
+    color: #ffc107;
+    font-weight: bold;
+}
+
+.alert-severity-info {
+    color: #17a2b8;
+}
+
+.alert-status-active {
+    color: #dc3545;
+}
+
+.alert-status-acknowledged {
+    color: #ffc107;
+}
+
+.alert-status-resolved {
+    color: #28a745;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.metric-card {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 1rem;
+}
+
+.metric-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #495057;
+}
+
+.metric-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+.alert-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.alert-actions .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
 }

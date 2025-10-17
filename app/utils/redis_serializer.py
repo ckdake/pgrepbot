@@ -93,6 +93,48 @@ class RedisModelMixin:
             return cls.from_redis(data)
         return None
 
+    @classmethod
+    async def get_from_redis(cls: type[T], redis_client, model_id: str, prefix: str | None = None) -> T | None:
+        """Get model from Redis by ID (alias for load_from_redis)"""
+        return await cls.load_from_redis(redis_client, model_id, prefix)
+
+    @classmethod
+    async def get_all_from_redis(cls: type[T], redis_client, prefix: str | None = None) -> list[T]:
+        """Get all models of this type from Redis"""
+        if prefix is None:
+            prefix = cls.__name__.lower()
+
+        # Get all keys matching the pattern
+        pattern = f"pgrepman:{prefix}:*"
+        keys = await redis_client.keys(pattern)
+        
+        models = []
+        for key in keys:
+            # Skip index keys and other non-model keys
+            if ":index:" in key or ":all" in key:
+                continue
+                
+            data = await redis_client.get(key)
+            if data:
+                try:
+                    model = cls.from_redis(data)
+                    models.append(model)
+                except Exception:
+                    # Skip invalid data
+                    continue
+                    
+        return models
+
+    @classmethod
+    async def delete_from_redis(cls, redis_client, model_id: str, prefix: str | None = None) -> bool:
+        """Delete model from Redis by ID"""
+        if prefix is None:
+            prefix = cls.__name__.lower()
+
+        key = RedisSerializer.generate_key(prefix, model_id)
+        result = await redis_client.delete(key)
+        return result > 0
+
 
 # Custom JSON encoder for datetime objects
 class DateTimeEncoder(json.JSONEncoder):
