@@ -107,13 +107,13 @@ class RedisModelMixin:
         # Get all keys matching the pattern
         pattern = f"pgrepman:{prefix}:*"
         keys = await redis_client.keys(pattern)
-        
+
         models = []
         for key in keys:
             # Skip index keys and other non-model keys
             if ":index:" in key or ":all" in key:
                 continue
-                
+
             data = await redis_client.get(key)
             if data:
                 try:
@@ -122,7 +122,7 @@ class RedisModelMixin:
                 except Exception:
                     # Skip invalid data
                     continue
-                    
+
         return models
 
     @classmethod

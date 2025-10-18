@@ -86,6 +86,7 @@ async def startup_event():
     except Exception as e:
         # Log error but don't fail startup
         import logging
+
         logger = logging.getLogger(__name__)
         logger.error(f"Failed to start background tasks: {e}")
 
@@ -97,6 +98,7 @@ async def shutdown_event():
         await stop_background_tasks()
     except Exception as e:
         import logging
+
         logger = logging.getLogger(__name__)
         logger.error(f"Failed to stop background tasks: {e}")
 

@@ -5,7 +5,7 @@ Alerting and monitoring service
 import asyncio
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import redis.asyncio as redis
@@ -13,7 +13,6 @@ import redis.asyncio as redis
 from app.models.alerts import (
     Alert,
     AlertMetric,
-    AlertRule,
     AlertSeverity,
     AlertStatus,
     AlertThreshold,
@@ -22,7 +21,6 @@ from app.models.alerts import (
     SystemHealth,
 )
 from app.models.database import DatabaseConfig
-from app.models.replication import ReplicationStream
 from app.services.postgres_connection import PostgreSQLConnectionManager
 from app.services.replication_discovery import ReplicationDiscoveryService
 
@@ -42,7 +40,7 @@ class AlertingService:
         self.connection_manager = connection_manager
         self.replication_service = replication_service
         self.start_time = time.time()
-        
+
         # Default thresholds
         self._default_thresholds = [
             AlertThreshold(
@@ -105,14 +103,14 @@ class AlertingService:
     async def collect_metrics(self) -> list[AlertMetric]:
         """Collect system metrics for alerting"""
         metrics = []
-        
+
         try:
             # Collect database health metrics
             db_configs = await self._get_database_configs()
             for db_config in db_configs:
                 try:
                     health = self.connection_manager.get_health_status(db_config.id)
-                    
+
                     # Database connection metric
                     connection_metric = AlertMetric(
                         metric_name="database_connection_failed",
@@ -121,13 +119,13 @@ class AlertingService:
                         labels={"database_name": db_config.name, "role": db_config.role},
                     )
                     metrics.append(connection_metric)
-                    
+
                     # Auto-resolve database connection alerts if database is now healthy
                     if health.is_healthy:
                         await self._auto_resolve_database_connection_alerts(db_config.id)
-                    
+
                     # Response time metric
-                    if health.is_healthy and hasattr(health, 'response_time_ms'):
+                    if health.is_healthy and hasattr(health, "response_time_ms"):
                         response_time_metric = AlertMetric(
                             metric_name="database_response_time_ms",
                             metric_value=health.response_time_ms,
@@ -135,10 +133,10 @@ class AlertingService:
                             labels={"database_name": db_config.name, "role": db_config.role},
                         )
                         metrics.append(response_time_metric)
-                        
+
                 except Exception as e:
                     logger.error(f"Failed to collect metrics for database {db_config.id}: {e}")
-                    
+
             # Collect long-running query metrics
             for db_config in db_configs:
                 try:
@@ -148,7 +146,7 @@ class AlertingService:
                         metrics.extend(long_running_metrics)
                 except Exception as e:
                     logger.error(f"Failed to collect long-running query metrics for database {db_config.id}: {e}")
-                    
+
             # Collect replication metrics
             try:
                 db_configs = await self._get_database_configs()
@@ -176,7 +174,7 @@ class AlertingService:
                                 metrics.append(lag_metric)
                         except Exception as e:
                             logger.debug(f"Failed to collect metrics for logical stream {stream.id}: {e}")
-                        
+
                     # Discover physical replication streams
                     physical_streams = await self.replication_service.discover_physical_replication(db_configs)
                     for stream in physical_streams:
@@ -198,47 +196,48 @@ class AlertingService:
                                 metrics.append(lag_metric)
                         except Exception as e:
                             logger.debug(f"Failed to collect metrics for physical stream {stream.id}: {e}")
-                        
+
             except Exception as e:
                 logger.error(f"Failed to collect replication metrics: {e}")
-                
+
         except Exception as e:
             logger.error(f"Failed to collect metrics: {e}")
-            
+
         return metrics
 
     async def evaluate_thresholds(self, metrics: list[AlertMetric]) -> list[Alert]:
         """Evaluate metrics against thresholds and generate alerts"""
         alerts = []
-        
+
         try:
             thresholds = await self.get_alert_thresholds()
-            
+
             for threshold in thresholds:
                 if not threshold.enabled:
                     continue
-                    
+
                 # Find matching metrics
                 matching_metrics = [
-                    m for m in metrics
+                    m
+                    for m in metrics
                     if m.metric_name == threshold.metric_name
                     and (not threshold.target_database_id or m.database_id == threshold.target_database_id)
                     and (not threshold.target_stream_id or m.stream_id == threshold.target_stream_id)
                 ]
-                
+
                 for metric in matching_metrics:
                     if self._evaluate_threshold(metric.metric_value, threshold):
                         # Check if alert already exists and is active
                         existing_alert = await self._find_existing_alert(threshold, metric)
-                        
+
                         if not existing_alert:
                             alert = await self._create_alert(threshold, metric)
                             alerts.append(alert)
                             logger.warning(f"Generated alert: {alert.title}")
-                            
+
         except Exception as e:
             logger.error(f"Failed to evaluate thresholds: {e}")
-            
+
         return alerts
 
     def _evaluate_threshold(self, value: float, threshold: AlertThreshold) -> bool:
@@ -255,9 +254,7 @@ class AlertingService:
             return value == threshold.threshold_value
         return False
 
-    async def _find_existing_alert(
-        self, threshold: AlertThreshold, metric: AlertMetric
-    ) -> Alert | None:
+    async def _find_existing_alert(self, threshold: AlertThreshold, metric: AlertMetric) -> Alert | None:
         """Find existing active alert for the same condition"""
         try:
             alerts = await self.get_active_alerts()
@@ -278,7 +275,7 @@ class AlertingService:
         # Generate alert title and message
         title = f"{threshold.name}: {threshold.metric_name}"
         message = self._generate_alert_message(threshold, metric)
-        
+
         alert = Alert(
             threshold_id=threshold.id,
             alert_type=threshold.alert_type,
@@ -297,12 +294,12 @@ class AlertingService:
                 "evaluation_time": metric.timestamp.isoformat(),
             },
         )
-        
+
         await alert.save_to_redis(self.redis_client)
-        
+
         # Send notifications
         await self._send_alert_notifications(alert)
-        
+
         return alert
 
     def _generate_alert_message(self, threshold: AlertThreshold, metric: AlertMetric) -> str:
@@ -314,40 +311,40 @@ class AlertingService:
             "lte": "less than or equal to",
             "eq": "equal to",
         }
-        
+
         op_text = operator_text.get(threshold.comparison_operator, "compared to")
-        
+
         message = (
             f"Metric '{threshold.metric_name}' value {metric.metric_value} is "
             f"{op_text} threshold {threshold.threshold_value}"
         )
-        
+
         if metric.database_id:
             message += f" for database {metric.database_id}"
         if metric.stream_id:
             message += f" for replication stream {metric.stream_id}"
-            
+
         return message
 
     async def _send_alert_notifications(self, alert: Alert) -> None:
         """Send alert notifications through configured channels"""
         try:
             channels = await self.get_notification_channels()
-            
+
             for channel in channels:
                 if not channel.enabled:
                     continue
-                    
+
                 # Check severity filter
                 if alert.severity not in channel.severity_filter:
                     continue
-                    
+
                 # Check alert type filter
                 if alert.alert_type not in channel.alert_type_filter:
                     continue
-                    
+
                 await self._send_notification(channel, alert)
-                
+
         except Exception as e:
             logger.error(f"Failed to send alert notifications: {e}")
 
@@ -374,7 +371,7 @@ class AlertingService:
             elif channel.channel_type == "slack":
                 # Placeholder for Slack notification
                 logger.info(f"Would send Slack notification for alert {alert.id}")
-                
+
         except Exception as e:
             logger.error(f"Failed to send notification via {channel.channel_type}: {e}")
 
@@ -385,15 +382,16 @@ class AlertingService:
             active_alerts = await self.get_active_alerts()
             critical_alerts = [a for a in active_alerts if a.severity == AlertSeverity.CRITICAL]
             warning_alerts = [a for a in active_alerts if a.severity == AlertSeverity.WARNING]
-            
+
             # Get database health from the database test API to avoid connection pool conflicts
             db_configs = await self._get_database_configs()
             healthy_dbs = 0
             total_dbs = len(db_configs)
-            
+
             try:
                 # Use the existing database test endpoint instead of creating new connections
                 import httpx
+
                 async with httpx.AsyncClient() as client:
                     response = await client.get("http://localhost:8000/api/databases/test")
                     if response.status_code == 200:
@@ -405,7 +403,7 @@ class AlertingService:
                 # Fallback to just using the config count
                 total_dbs = len(db_configs)
                 healthy_dbs = 0
-                    
+
             # Get replication health (simplified)
             healthy_streams = 0
             total_streams = 0
@@ -413,15 +411,12 @@ class AlertingService:
                 if db_configs:
                     logical_streams = await self.replication_service.discover_logical_replication(db_configs)
                     physical_streams = await self.replication_service.discover_physical_replication(db_configs)
-                    
+
                     total_streams = len(logical_streams) + len(physical_streams)
-                    healthy_streams = len([
-                        s for s in logical_streams + physical_streams
-                        if s.status == "active"
-                    ])
+                    healthy_streams = len([s for s in logical_streams + physical_streams if s.status == "active"])
             except Exception as e:
                 logger.debug(f"Failed to get replication health: {e}")
-                
+
             # Determine overall status
             if critical_alerts:
                 status = "critical"
@@ -429,7 +424,7 @@ class AlertingService:
                 status = "degraded"
             else:
                 status = "healthy"
-                
+
             return SystemHealth(
                 status=status,
                 active_alerts=len(active_alerts),
@@ -441,7 +436,7 @@ class AlertingService:
                 healthy_streams=healthy_streams,
                 uptime_seconds=time.time() - self.start_time,
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to get system health: {e}")
             return SystemHealth(
@@ -457,7 +452,7 @@ class AlertingService:
             )
 
     # CRUD operations for alert management
-    
+
     async def get_alert_thresholds(self) -> list[AlertThreshold]:
         """Get all alert thresholds"""
         return await AlertThreshold.get_all_from_redis(self.redis_client)
@@ -473,11 +468,11 @@ class AlertingService:
         threshold = await AlertThreshold.get_from_redis(self.redis_client, threshold_id)
         if not threshold:
             return None
-            
+
         for key, value in updates.items():
             if hasattr(threshold, key):
                 setattr(threshold, key, value)
-                
+
         threshold.updated_at = datetime.utcnow()
         await threshold.save_to_redis(self.redis_client)
         return threshold
@@ -503,11 +498,11 @@ class AlertingService:
         alert = await Alert.get_from_redis(self.redis_client, alert_id)
         if not alert:
             return None
-            
+
         alert.status = AlertStatus.ACKNOWLEDGED
         alert.acknowledged_at = datetime.utcnow()
         alert.acknowledged_by = user_id
-        
+
         await alert.save_to_redis(self.redis_client)
         return alert
 
@@ -516,20 +511,20 @@ class AlertingService:
         alert = await Alert.get_from_redis(self.redis_client, alert_id)
         if not alert:
             return None
-            
+
         alert.status = AlertStatus.RESOLVED
         alert.resolved_at = datetime.utcnow()
         alert.resolved_by = user_id
         if notes:
             alert.resolution_notes = notes
-            
+
         await alert.save_to_redis(self.redis_client)
         return alert
 
     async def get_notification_channels(self) -> list[NotificationChannel]:
         """Get all notification channels"""
         channels = await NotificationChannel.get_all_from_redis(self.redis_client)
-        
+
         # Create default log channel if none exist
         if not channels:
             default_channel = NotificationChannel(
@@ -540,7 +535,7 @@ class AlertingService:
             )
             await default_channel.save_to_redis(self.redis_client)
             channels = [default_channel]
-            
+
         return channels
 
     async def _get_database_configs(self) -> list[DatabaseConfig]:
@@ -572,22 +567,25 @@ class AlertingService:
             # Get all active database connection alerts for this database
             active_alerts = await self.get_active_alerts()
             db_connection_alerts = [
-                alert for alert in active_alerts 
-                if (alert.alert_type == AlertType.DATABASE_CONNECTION and 
-                    alert.database_id == database_id and 
-                    alert.status == AlertStatus.ACTIVE)
+                alert
+                for alert in active_alerts
+                if (
+                    alert.alert_type == AlertType.DATABASE_CONNECTION
+                    and alert.database_id == database_id
+                    and alert.status == AlertStatus.ACTIVE
+                )
             ]
-            
+
             # Auto-resolve them
             for alert in db_connection_alerts:
                 alert.status = AlertStatus.RESOLVED
                 alert.resolved_at = datetime.utcnow()
                 alert.resolved_by = "system"
                 alert.resolution_notes = "Auto-resolved: Database connection restored"
-                
+
                 await alert.save_to_redis(self.redis_client)
                 logger.info(f"Auto-resolved database connection alert {alert.id} for database {database_id}")
-                
+
         except Exception as e:
             logger.error(f"Failed to auto-resolve database connection alerts for {database_id}: {e}")
 
@@ -595,26 +593,26 @@ class AlertingService:
         """Run a single monitoring cycle"""
         try:
             logger.debug("Starting monitoring cycle")
-            
+
             # Collect metrics
             metrics = await self.collect_metrics()
             logger.debug(f"Collected {len(metrics)} metrics")
-            
+
             # Evaluate thresholds and generate alerts
             new_alerts = await self.evaluate_thresholds(metrics)
             if new_alerts:
                 logger.info(f"Generated {len(new_alerts)} new alerts")
-                
+
         except Exception as e:
             logger.error(f"Monitoring cycle failed: {e}")
 
     async def _collect_long_running_query_metrics(self, db_id: str) -> list[AlertMetric]:
         """Collect metrics for long-running queries that may impact replication"""
         metrics = []
-        
+
         # Query to find long-running queries (>30 seconds)
         query = """
-        SELECT 
+        SELECT
             pid,
             usename,
             application_name,
@@ -625,7 +623,7 @@ class AlertingService:
             LEFT(query, 100) as query_preview,
             backend_xmin,
             backend_xid
-        FROM pg_stat_activity 
+        FROM pg_stat_activity
         WHERE state IN ('active', 'idle in transaction', 'idle in transaction (aborted)')
           AND query_start IS NOT NULL
           AND EXTRACT(EPOCH FROM (NOW() - query_start)) > 30
@@ -633,10 +631,10 @@ class AlertingService:
           AND usename IS NOT NULL      -- Exclude background processes
         ORDER BY duration_seconds DESC
         """
-        
+
         try:
             results = await self.connection_manager.execute_query(db_id, query)
-            
+
             if results:
                 # Count of long-running queries
                 count_metric = AlertMetric(
@@ -646,7 +644,7 @@ class AlertingService:
                     labels={"threshold_seconds": "30"},
                 )
                 metrics.append(count_metric)
-                
+
                 # Maximum duration of long-running queries
                 max_duration = max(row["duration_seconds"] for row in results)
                 max_duration_metric = AlertMetric(
@@ -656,11 +654,11 @@ class AlertingService:
                     labels={
                         "threshold_seconds": "30",
                         "query_count": str(len(results)),
-                        "max_duration_formatted": f"{int(max_duration // 60)}m {int(max_duration % 60)}s"
+                        "max_duration_formatted": f"{int(max_duration // 60)}m {int(max_duration % 60)}s",
                     },
                 )
                 metrics.append(max_duration_metric)
-                
+
                 # Log details about long-running queries for debugging
                 for row in results:
                     duration_formatted = f"{int(row['duration_seconds'] // 60)}m {int(row['duration_seconds'] % 60)}s"
@@ -679,20 +677,20 @@ class AlertingService:
                     labels={"threshold_seconds": "30"},
                 )
                 metrics.append(count_metric)
-                
+
         except Exception as e:
             logger.error(f"Failed to collect long-running query metrics for {db_id}: {e}")
             # Return empty metrics on error to avoid breaking the monitoring cycle
-            
+
         return metrics
 
     async def start_monitoring(self, interval_seconds: int = 60) -> None:
         """Start continuous monitoring (for background task)"""
         logger.info(f"Starting continuous monitoring with {interval_seconds}s interval")
-        
+
         # Initialize default thresholds
         await self.initialize_default_thresholds()
-        
+
         while True:
             try:
                 await self.run_monitoring_cycle()

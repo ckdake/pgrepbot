@@ -12,7 +12,6 @@ from app.dependencies import get_redis_client
 from app.middleware.auth import get_current_user, require_admin, require_viewer
 from app.models.alerts import (
     Alert,
-    AlertSeverity,
     AlertThreshold,
     NotificationChannel,
     SystemHealth,
@@ -31,26 +30,20 @@ async def get_alerting_service(
     redis_client: redis.Redis = Depends(get_redis_client),
 ) -> AlertingService:
     """Get alerting service instance"""
-    from app.services.aws_secrets import SecretsManagerClient
     from app.services.aws_rds import RDSClient
-    
+    from app.services.aws_secrets import SecretsManagerClient
+
     # Create AWS clients for credential resolution
     secrets_client = SecretsManagerClient()
     rds_client = RDSClient()
-    
-    connection_manager = PostgreSQLConnectionManager(
-        secrets_client=secrets_client,
-        rds_client=rds_client
-    )
-    
+
+    connection_manager = PostgreSQLConnectionManager(secrets_client=secrets_client, rds_client=rds_client)
+
     # Don't add databases here to avoid connection pool conflicts
     # The alerting service will get database health from the database test API
-    
+
     replication_service = ReplicationDiscoveryService(connection_manager, redis_client)
     return AlertingService(redis_client, connection_manager, replication_service)
-
-
-
 
 
 @router.get("/health", response_model=SystemHealth)
@@ -279,7 +272,7 @@ async def get_metrics_summary(
     """Get summary of current metrics"""
     try:
         metrics = await alerting_service.collect_metrics()
-        
+
         # Group metrics by type
         summary = {}
         for metric in metrics:
@@ -292,19 +285,19 @@ async def get_metrics_summary(
                     "min": float("inf"),
                     "max": float("-inf"),
                 }
-            
+
             summary[metric_type]["count"] += 1
             summary[metric_type]["values"].append(metric.metric_value)
             summary[metric_type]["min"] = min(summary[metric_type]["min"], metric.metric_value)
             summary[metric_type]["max"] = max(summary[metric_type]["max"], metric.metric_value)
-        
+
         # Calculate averages
         for metric_type in summary:
             values = summary[metric_type]["values"]
             summary[metric_type]["avg"] = sum(values) / len(values) if values else 0.0
             # Remove raw values from response
             del summary[metric_type]["values"]
-        
+
         return {
             "total_metrics": len(metrics),
             "metric_types": len(summary),
