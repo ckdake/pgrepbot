@@ -35,6 +35,7 @@ class AlertType(str, Enum):
     REPLICATION_LAG = "replication_lag"
     REPLICATION_FAILURE = "replication_failure"
     DATABASE_CONNECTION = "database_connection"
+    LONG_RUNNING_QUERY = "long_running_query"
     MIGRATION_FAILURE = "migration_failure"
     SYSTEM_ERROR = "system_error"
 

@@ -70,6 +70,24 @@ class AlertingService:
                 name="Database Connection Failure",
                 description="Alert when database connection fails",
             ),
+            AlertThreshold(
+                alert_type=AlertType.LONG_RUNNING_QUERY,
+                severity=AlertSeverity.WARNING,
+                metric_name="long_running_query_count",
+                threshold_value=1.0,
+                comparison_operator="gte",
+                name="Long Running Queries Detected",
+                description="Alert when queries run longer than 30 seconds",
+            ),
+            AlertThreshold(
+                alert_type=AlertType.LONG_RUNNING_QUERY,
+                severity=AlertSeverity.CRITICAL,
+                metric_name="long_running_query_max_duration",
+                threshold_value=300.0,  # 5 minutes
+                comparison_operator="gte",
+                name="Very Long Running Query",
+                description="Alert when a query runs longer than 5 minutes",
+            ),
         ]
 
     async def initialize_default_thresholds(self) -> None:
@@ -116,6 +134,16 @@ class AlertingService:
                         
                 except Exception as e:
                     logger.error(f"Failed to collect metrics for database {db_config.id}: {e}")
+                    
+            # Collect long-running query metrics
+            for db_config in db_configs:
+                try:
+                    health = self.connection_manager.get_health_status(db_config.id)
+                    if health.is_healthy:
+                        long_running_metrics = await self._collect_long_running_query_metrics(db_config.id)
+                        metrics.extend(long_running_metrics)
+                except Exception as e:
+                    logger.error(f"Failed to collect long-running query metrics for database {db_config.id}: {e}")
                     
             # Collect replication metrics
             try:
@@ -523,6 +551,84 @@ class AlertingService:
                 
         except Exception as e:
             logger.error(f"Monitoring cycle failed: {e}")
+
+    async def _collect_long_running_query_metrics(self, db_id: str) -> list[AlertMetric]:
+        """Collect metrics for long-running queries that may impact replication"""
+        metrics = []
+        
+        # Query to find long-running queries (>30 seconds)
+        query = """
+        SELECT 
+            pid,
+            usename,
+            application_name,
+            client_addr,
+            state,
+            query_start,
+            EXTRACT(EPOCH FROM (NOW() - query_start)) as duration_seconds,
+            LEFT(query, 100) as query_preview,
+            backend_xmin,
+            backend_xid
+        FROM pg_stat_activity 
+        WHERE state IN ('active', 'idle in transaction', 'idle in transaction (aborted)')
+          AND query_start IS NOT NULL
+          AND EXTRACT(EPOCH FROM (NOW() - query_start)) > 30
+          AND pid != pg_backend_pid()  -- Exclude our own connection
+          AND usename IS NOT NULL      -- Exclude background processes
+        ORDER BY duration_seconds DESC
+        """
+        
+        try:
+            results = await self.connection_manager.execute_query(db_id, query)
+            
+            if results:
+                # Count of long-running queries
+                count_metric = AlertMetric(
+                    metric_name="long_running_query_count",
+                    metric_value=float(len(results)),
+                    database_id=db_id,
+                    labels={"threshold_seconds": "30"},
+                )
+                metrics.append(count_metric)
+                
+                # Maximum duration of long-running queries
+                max_duration = max(row["duration_seconds"] for row in results)
+                max_duration_metric = AlertMetric(
+                    metric_name="long_running_query_max_duration",
+                    metric_value=float(max_duration),
+                    database_id=db_id,
+                    labels={
+                        "threshold_seconds": "30",
+                        "query_count": str(len(results)),
+                        "max_duration_formatted": f"{int(max_duration // 60)}m {int(max_duration % 60)}s"
+                    },
+                )
+                metrics.append(max_duration_metric)
+                
+                # Log details about long-running queries for debugging
+                for row in results:
+                    duration_formatted = f"{int(row['duration_seconds'] // 60)}m {int(row['duration_seconds'] % 60)}s"
+                    logger.warning(
+                        f"Long-running query detected on {db_id}: "
+                        f"PID {row['pid']}, Duration: {duration_formatted}, "
+                        f"User: {row['usename']}, App: {row['application_name']}, "
+                        f"Query: {row['query_preview']}..."
+                    )
+            else:
+                # No long-running queries found
+                count_metric = AlertMetric(
+                    metric_name="long_running_query_count",
+                    metric_value=0.0,
+                    database_id=db_id,
+                    labels={"threshold_seconds": "30"},
+                )
+                metrics.append(count_metric)
+                
+        except Exception as e:
+            logger.error(f"Failed to collect long-running query metrics for {db_id}: {e}")
+            # Return empty metrics on error to avoid breaking the monitoring cycle
+            
+        return metrics
 
     async def start_monitoring(self, interval_seconds: int = 60) -> None:
         """Start continuous monitoring (for background task)"""

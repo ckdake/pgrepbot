@@ -48,7 +48,23 @@ class TestAlertingModels:
             threshold_value=-1.0,
             name="Negative Threshold",
         )
-        assert negative_threshold.threshold_value == -1.0
+
+    def test_long_running_query_alert_type(self):
+        """Test long-running query alert type"""
+        threshold = AlertThreshold(
+            alert_type=AlertType.LONG_RUNNING_QUERY,
+            severity=AlertSeverity.WARNING,
+            metric_name="long_running_query_count",
+            threshold_value=1.0,
+            comparison_operator="gte",
+            name="Long Running Query Alert",
+            description="Alert when queries run longer than 30 seconds",
+        )
+        
+        assert threshold.alert_type == AlertType.LONG_RUNNING_QUERY
+        assert threshold.metric_name == "long_running_query_count"
+        assert threshold.comparison_operator == "gte"
+        assert threshold.threshold_value == 1.0
 
     def test_alert_model_creation(self):
         """Test Alert model creation"""
