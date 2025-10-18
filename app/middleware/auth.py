@@ -28,6 +28,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             "/api/auth/methods",
             "/api/auth/oidc/authorize",
             "/api/auth/oidc/callback",
+            "/api/databases/test",  # Allow dashboard to check database status
             "/docs",
             "/openapi.json",
             "/redoc",

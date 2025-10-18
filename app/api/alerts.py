@@ -31,9 +31,54 @@ async def get_alerting_service(
     redis_client: redis.Redis = Depends(get_redis_client),
 ) -> AlertingService:
     """Get alerting service instance"""
-    connection_manager = PostgreSQLConnectionManager(redis_client)
+    from app.services.aws_secrets import SecretsManagerClient
+    from app.services.aws_rds import RDSClient
+    
+    # Create AWS clients for credential resolution
+    secrets_client = SecretsManagerClient()
+    rds_client = RDSClient()
+    
+    connection_manager = PostgreSQLConnectionManager(
+        secrets_client=secrets_client,
+        rds_client=rds_client
+    )
+    
+    # Add databases to connection manager
+    await _add_databases_to_manager(connection_manager, redis_client)
+    
     replication_service = ReplicationDiscoveryService(connection_manager, redis_client)
     return AlertingService(redis_client, connection_manager, replication_service)
+
+
+async def _add_databases_to_manager(manager: PostgreSQLConnectionManager, redis_client) -> None:
+    """Add configured databases to the connection manager."""
+    try:
+        # Get all database configuration keys from Redis
+        pattern = "database:*"
+        keys = await redis_client.keys(pattern)
+
+        for key in keys:
+            try:
+                config_json = await redis_client.get(key)
+                if config_json:
+                    from app.models.database import DatabaseConfig
+                    config = DatabaseConfig.model_validate_json(config_json)
+                    
+                    # Add database to connection manager
+                    await manager.add_database(
+                        db_id=config.id,
+                        host=config.host,
+                        port=config.port,
+                        database=config.database,
+                        secrets_arn=config.credentials_arn,
+                        use_iam_auth=config.use_iam_auth,
+                    )
+                    logger.info(f"Added database {config.name} ({config.id}) to alerting connection manager")
+            except Exception as e:
+                logger.error(f"Failed to add database from key {key}: {e}")
+                
+    except Exception as e:
+        logger.error(f"Failed to add databases to alerting connection manager: {e}")
 
 
 @router.get("/health", response_model=SystemHealth)

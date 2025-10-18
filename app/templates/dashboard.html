@@ -14,11 +14,7 @@
 
 {% block extra_scripts %}
 <script>
-    // Auto-load dashboard on page load
-    document.addEventListener('DOMContentLoaded', () => {
-        if (window.replicationManager) {
-            window.replicationManager.navigateTo('dashboard');
-        }
-    });
+    // The main JavaScript will handle initial page loading based on URL parameters
+    // No need to force navigation to dashboard here
 </script>
 {% endblock %}

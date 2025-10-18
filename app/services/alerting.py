@@ -122,6 +122,10 @@ class AlertingService:
                     )
                     metrics.append(connection_metric)
                     
+                    # Auto-resolve database connection alerts if database is now healthy
+                    if health.is_healthy:
+                        await self._auto_resolve_database_connection_alerts(db_config.id)
+                    
                     # Response time metric
                     if health.is_healthy and hasattr(health, 'response_time_ms'):
                         response_time_metric = AlertMetric(
@@ -530,10 +534,50 @@ class AlertingService:
     async def _get_database_configs(self) -> list[DatabaseConfig]:
         """Get all database configurations"""
         try:
-            return await DatabaseConfig.get_all_from_redis(self.redis_client)
+            # Get all database configuration keys from Redis
+            pattern = "database:*"
+            keys = await self.redis_client.keys(pattern)
+
+            database_configs = []
+            for key in keys:
+                try:
+                    config_json = await self.redis_client.get(key)
+                    if config_json:
+                        config = DatabaseConfig.model_validate_json(config_json)
+                        database_configs.append(config)
+                except Exception as e:
+                    logger.warning(f"Failed to parse database config from key {key}: {e}")
+                    continue
+
+            return database_configs
         except Exception as e:
             logger.error(f"Failed to get database configs: {e}")
             return []
+
+    async def _auto_resolve_database_connection_alerts(self, database_id: str) -> None:
+        """Auto-resolve database connection alerts when database becomes healthy"""
+        try:
+            # Get all active database connection alerts for this database
+            active_alerts = await self.get_active_alerts()
+            db_connection_alerts = [
+                alert for alert in active_alerts 
+                if (alert.alert_type == AlertType.DATABASE_CONNECTION and 
+                    alert.database_id == database_id and 
+                    alert.status == AlertStatus.ACTIVE)
+            ]
+            
+            # Auto-resolve them
+            for alert in db_connection_alerts:
+                alert.status = AlertStatus.RESOLVED
+                alert.resolved_at = datetime.utcnow()
+                alert.resolved_by = "system"
+                alert.resolution_notes = "Auto-resolved: Database connection restored"
+                
+                await alert.save_to_redis(self.redis_client)
+                logger.info(f"Auto-resolved database connection alert {alert.id} for database {database_id}")
+                
+        except Exception as e:
+            logger.error(f"Failed to auto-resolve database connection alerts for {database_id}: {e}")
 
     async def run_monitoring_cycle(self) -> None:
         """Run a single monitoring cycle"""

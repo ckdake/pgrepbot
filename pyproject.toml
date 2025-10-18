@@ -139,5 +139,32 @@ precision = 2
 [tool.coverage.html]
 directory = "htmlcov"
 
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=app",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-fail-under=50",
+]
+testpaths = ["tests"]
+markers = [
+    "unit: Unit tests that don't require external services",
+    "integration: Integration tests that require LocalStack/Redis/PostgreSQL",
+    "e2e: End-to-end tests that test complete workflows",
+    "performance: Performance and load tests",
+    "security: Security-focused tests",
+    "slow: Tests that take longer than 5 seconds",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning:botocore.*",
+    "ignore::DeprecationWarning:pydantic.*",
+    "ignore::RuntimeWarning:asyncio.*",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

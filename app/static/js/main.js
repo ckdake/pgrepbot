@@ -7,6 +7,30 @@ class ReplicationManager {
         this.init();
     }
 
+    // Helper method for authenticated API calls
+    async apiCall(url, options = {}) {
+        const defaultOptions = {
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        };
+        
+        const response = await fetch(url, { ...defaultOptions, ...options });
+        
+        if (!response.ok) {
+            if (response.status === 401) {
+                // Redirect to login if unauthorized
+                window.location.href = '/login';
+                throw new Error('Authentication required');
+            }
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        return response.json();
+    }
+
     init() {
         this.setupNavigation();
         this.setupAutoRefresh();
@@ -97,11 +121,18 @@ class ReplicationManager {
     }
 
     async loadDashboard() {
-        const [systemStatus, dbStatus, replicationStatus] = await Promise.all([
-            this.fetchSystemStatus(),
-            this.fetchDatabaseStatus(),
-            this.fetchReplicationStatus()
-        ]);
+        // Load data with individual error handling
+        const systemStatus = await this.fetchSystemStatus().catch(error => ({
+            status: 'error', icon: '❌', message: `System status error: ${error.message}`
+        }));
+        
+        const dbStatus = await this.fetchDatabaseStatus().catch(error => ({
+            status: 'error', icon: '❌', healthy: 0, total: 0, avgResponseTime: 0
+        }));
+        
+        const replicationStatus = await this.fetchReplicationStatus().catch(error => ({
+            status: 'error', icon: '❌', active: 0, total: 0, avgLag: 0
+        }));
 
         const content = `
             <h1 class="page-title">Dashboard</h1>
@@ -457,8 +488,7 @@ class ReplicationManager {
     // API Methods
     async fetchSystemStatus() {
         try {
-            const response = await fetch('/health');
-            const data = await response.json();
+            const data = await this.apiCall('/health');
             return {
                 status: data.status === 'healthy' ? 'healthy' : 'error',
                 icon: data.status === 'healthy' ? '✅' : '❌',
@@ -475,8 +505,7 @@ class ReplicationManager {
 
     async fetchDatabaseStatus() {
         try {
-            const response = await fetch('/api/databases/test');
-            const data = await response.json();
+            const data = await this.apiCall('/api/databases/test');
             return {
                 status: data.overall_status === 'healthy' ? 'healthy' : 'warning',
                 icon: data.overall_status === 'healthy' ? '✅' : '⚠️',
@@ -497,8 +526,7 @@ class ReplicationManager {
 
     async fetchReplicationStatus() {
         try {
-            const response = await fetch('/api/replication/discover');
-            const data = await response.json();
+            const data = await this.apiCall('/api/replication/discover');
             const activeStreams = [...data.logical_streams, ...data.physical_streams].filter(s => s.status === 'active');
             const avgLag = activeStreams.length > 0 
                 ? Math.round(activeStreams.reduce((sum, s) => sum + (s.lag_seconds * 1000), 0) / activeStreams.length)
@@ -538,7 +566,9 @@ class ReplicationManager {
 
     async loadTopologyVisualization() {
         try {
-            const response = await fetch('/api/replication/topology');
+            const response = await fetch('/api/replication/topology', {
+                credentials: 'same-origin'
+            });
             const data = await response.json();
             
             // Initialize topology visualization if not already done
@@ -639,9 +669,11 @@ class ReplicationManager {
         container.innerHTML = html || '<div class="text-muted">No replication streams found</div>';
     }
 
-    async loadDatabasesTable() {
+    async loadDatabaseConfigsTable() {
         try {
-            const response = await fetch('/api/databases/test');
+            const response = await fetch('/api/database-config', {
+                credentials: 'same-origin'
+            });
             const data = await response.json();
             
             let html = `
@@ -696,7 +728,9 @@ class ReplicationManager {
 
     async loadReplicationStreams() {
         try {
-            const response = await fetch('/api/replication/discover');
+            const response = await fetch('/api/replication/discover', {
+                credentials: 'same-origin'
+            });
             const data = await response.json();
             
             const allStreams = [...data.logical_streams, ...data.physical_streams];
@@ -1313,56 +1347,22 @@ ON CONFLICT (username) DO NOTHING;`;
         const page = urlParams.get('page') || 'dashboard';
         this.navigateTo(page);
     }
-}
 
-// Initialize the application when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    window.replicationManager = new ReplicationManager();
-});
-
-// Handle browser back/forward buttons
-window.addEventListener('popstate', (e) => {
-    if (e.state && e.state.page) {
-        window.replicationManager.navigateTo(e.state.page);
-    }
-}); 
-   async loadAlerts() {
+    async loadAlerts() {
         const content = `
             <h1 class="page-title">Alerts & Monitoring</h1>
             
-            <div class="row">
-                <div class="col-4">
-                    <div class="card">
-                        <div class="card-header">System Health</div>
-                        <div class="card-body">
-                            <div id="system-health">Loading...</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-4">
-                    <div class="card">
-                        <div class="card-header">Active Alerts</div>
-                        <div class="card-body">
-                            <div id="active-alerts-summary">Loading...</div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-4">
-                    <div class="card">
-                        <div class="card-header">Metrics Summary</div>
-                        <div class="card-body">
-                            <div id="metrics-summary">Loading...</div>
-                        </div>
-                    </div>
+            <div class="card">
+                <div class="card-header">System Status & Active Alerts</div>
+                <div class="card-body">
+                    <div id="system-status-combined">Loading...</div>
                 </div>
             </div>
 
             <div class="card">
                 <div class="card-header">
                     <div class="d-flex justify-content-between align-items-center">
-                        <span>Active Alerts</span>
+                        <span>Monitoring Checks</span>
                         <div>
                             <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.refreshAlerts()">
                                 🔄 Refresh
@@ -1373,6 +1373,13 @@ window.addEventListener('popstate', (e) => {
                         </div>
                     </div>
                 </div>
+                <div class="card-body">
+                    <div id="monitoring-checks-table">Loading monitoring checks...</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Active Alerts</div>
                 <div class="card-body">
                     <div id="active-alerts-table">Loading active alerts...</div>
                 </div>
@@ -1425,8 +1432,13 @@ window.addEventListener('popstate', (e) => {
             // Load active alerts
             const activeAlertsResponse = await fetch('/api/alerts/active');
             const activeAlerts = await activeAlertsResponse.json();
-            this.renderActiveAlertsSummary(activeAlerts);
+            
+            // Render combined system status and alerts
+            this.renderCombinedSystemStatus(healthData, activeAlerts);
             this.renderActiveAlertsTable(activeAlerts);
+            
+            // Load monitoring checks status
+            this.renderMonitoringChecks(healthData, activeAlerts);
 
             // Load alert history
             const historyResponse = await fetch('/api/alerts/?limit=50');
@@ -1449,8 +1461,8 @@ window.addEventListener('popstate', (e) => {
         }
     }
 
-    renderSystemHealth(health) {
-        const container = document.getElementById('system-health');
+    renderCombinedSystemStatus(health, activeAlerts) {
+        const container = document.getElementById('system-status-combined');
         if (!container) return;
 
         const statusIcon = {
@@ -1465,19 +1477,79 @@ window.addEventListener('popstate', (e) => {
             'critical': 'error'
         };
 
+        const criticalAlerts = activeAlerts.filter(a => a.severity === 'critical');
+        const warningAlerts = activeAlerts.filter(a => a.severity === 'warning');
+
+        let alertsHtml = '';
+        if (activeAlerts.length === 0) {
+            alertsHtml = '<div class="text-muted">No active alerts</div>';
+        } else {
+            alertsHtml = '<div class="mt-3"><strong>Active Issues:</strong><ul class="mt-2">';
+            
+            criticalAlerts.forEach(alert => {
+                alertsHtml += `<li class="text-danger">❌ ${alert.title}</li>`;
+            });
+            
+            warningAlerts.forEach(alert => {
+                alertsHtml += `<li class="text-warning">⚠️ ${alert.title}</li>`;
+            });
+            
+            alertsHtml += '</ul></div>';
+        }
+
+        // Clean up alert titles to be more user-friendly
+        const cleanAlertTitle = (title) => {
+            return title
+                .replace(/: \w+_\w+.*$/, '') // Remove technical metric names
+                .replace('Very Long Running Query', 'Database Query Running Too Long')
+                .replace('Long Running Queries Detected', 'Slow Database Queries Detected')
+                .replace('Database Connection Failure', 'Database Connection Failed');
+        };
+
         container.innerHTML = `
-            <div class="status ${statusClass[health.status]}">
-                <span>${statusIcon[health.status]}</span>
-                System ${health.status}
-            </div>
-            <div class="mt-2">
-                <small>
-                    Databases: ${health.healthy_databases}/${health.total_databases} healthy<br>
-                    Streams: ${health.healthy_streams}/${health.total_streams} active<br>
-                    Uptime: ${Math.floor(health.uptime_seconds / 3600)}h ${Math.floor((health.uptime_seconds % 3600) / 60)}m
-                </small>
+            <div class="d-flex justify-content-between align-items-start">
+                <div style="flex: 1; margin-right: 2rem;">
+                    <div class="status ${statusClass[health.status]} mb-3" style="font-size: 1.1em;">
+                        <span>${statusIcon[health.status]}</span>
+                        <strong>System ${health.status.charAt(0).toUpperCase() + health.status.slice(1)}</strong>
+                    </div>
+                    <div>
+                        <div class="mb-1">📊 Databases: <strong>${health.healthy_databases}/${health.total_databases}</strong> healthy</div>
+                        <div class="mb-1">🔄 Streams: <strong>${health.healthy_streams}/${health.total_streams}</strong> active</div>
+                        <div class="text-muted" style="font-size: 0.9em;">Last check: ${new Date(health.last_check).toLocaleTimeString()}</div>
+                    </div>
+                </div>
+                <div style="flex: 1;">
+                    ${activeAlerts.length === 0 ? 
+                        '<div class="text-center text-muted" style="padding: 2rem;"><div style="font-size: 2em;">✅</div><div>No active alerts</div></div>' :
+                        `<div class="mb-2"><strong>Active Issues (${activeAlerts.length})</strong></div>
+                         <div class="alert-list">
+                            ${criticalAlerts.map(alert => 
+                                `<div class="alert-item critical mb-2 p-2" style="border-left: 4px solid #dc3545; background: #f8d7da; border-radius: 4px;">
+                                    <div class="d-flex align-items-center">
+                                        <span style="margin-right: 8px;">❌</span>
+                                        <strong>${cleanAlertTitle(alert.title)}</strong>
+                                    </div>
+                                </div>`
+                            ).join('')}
+                            ${warningAlerts.map(alert => 
+                                `<div class="alert-item warning mb-2 p-2" style="border-left: 4px solid #ffc107; background: #fff3cd; border-radius: 4px;">
+                                    <div class="d-flex align-items-center">
+                                        <span style="margin-right: 8px;">⚠️</span>
+                                        <strong>${cleanAlertTitle(alert.title)}</strong>
+                                    </div>
+                                </div>`
+                            ).join('')}
+                         </div>`
+                    }
+                </div>
             </div>
         `;
+    }
+
+    renderSystemHealth(health) {
+        // Legacy function - now handled by renderCombinedSystemStatus
+        return;
     }
 
     renderActiveAlertsSummary(alerts) {
@@ -1501,18 +1573,8 @@ window.addEventListener('popstate', (e) => {
             statusText = `${warningAlerts} warning${warningAlerts > 1 ? 's' : ''}`;
         }
 
-        container.innerHTML = `
-            <div class="status ${statusClass}">
-                <span>${statusIcon}</span>
-                ${statusText}
-            </div>
-            <div class="mt-2">
-                <small>
-                    Total: ${alerts.length} active alerts<br>
-                    Critical: ${criticalAlerts}, Warning: ${warningAlerts}
-                </small>
-            </div>
-        `;
+        // This function is no longer used - replaced by renderCombinedSystemStatus
+        return;
     }
 
     renderActiveAlertsTable(alerts) {
@@ -1569,6 +1631,93 @@ window.addEventListener('popstate', (e) => {
                             Resolve
                         </button>
                     </td>
+                </tr>
+            `;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    }
+
+    renderMonitoringChecks(healthData, activeAlerts) {
+        const container = document.getElementById('monitoring-checks-table');
+        if (!container) return;
+
+        // Define the monitoring checks we perform
+        const checks = [
+            {
+                name: 'Database Connection Check',
+                description: 'Verifies connectivity to all configured databases',
+                type: 'database_connection',
+                lastRun: healthData.last_check,
+                status: healthData.healthy_databases === healthData.total_databases ? 'healthy' : 'failed',
+                details: `${healthData.healthy_databases}/${healthData.total_databases} databases healthy`
+            },
+            {
+                name: 'Replication Lag Check',
+                description: 'Monitors replication lag across all streams',
+                type: 'replication_lag',
+                lastRun: healthData.last_check,
+                status: healthData.healthy_streams === healthData.total_streams ? 'healthy' : 'warning',
+                details: `${healthData.healthy_streams}/${healthData.total_streams} streams active`
+            },
+            {
+                name: 'Long Running Query Check',
+                description: 'Detects queries running longer than threshold',
+                type: 'long_running_query',
+                lastRun: healthData.last_check,
+                status: activeAlerts.some(a => a.alert_type === 'long_running_query') ? 'warning' : 'healthy',
+                details: 'Monitoring queries > 30 seconds'
+            },
+            {
+                name: 'WAL Retention Check',
+                description: 'Monitors WAL file retention and disk usage',
+                type: 'wal_retention',
+                lastRun: healthData.last_check,
+                status: activeAlerts.some(a => a.alert_type === 'wal_retention') ? 'warning' : 'healthy',
+                details: 'Checking WAL disk usage'
+            }
+        ];
+
+        let html = `
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Check</th>
+                        <th>Status</th>
+                        <th>Last Run</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        checks.forEach(check => {
+            const statusIcon = {
+                'healthy': '✅',
+                'warning': '⚠️',
+                'failed': '❌'
+            };
+
+            const statusClass = {
+                'healthy': 'healthy',
+                'warning': 'warning',
+                'failed': 'error'
+            };
+
+            html += `
+                <tr>
+                    <td>
+                        <strong>${check.name}</strong><br>
+                        <small class="text-muted">${check.description}</small>
+                    </td>
+                    <td>
+                        <div class="status ${statusClass[check.status]}">
+                            ${statusIcon[check.status]} ${check.status}
+                        </div>
+                    </td>
+                    <td>${new Date(check.lastRun).toLocaleString()}</td>
+                    <td>${check.details}</td>
                 </tr>
             `;
         });
@@ -1742,3 +1891,15 @@ window.addEventListener('popstate', (e) => {
     hideAlertThresholds() {
         document.getElementById('alert-thresholds-modal').style.display = 'none';
     }
+}
+
+// Initialize the application when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    window.replicationManager = new ReplicationManager();
+});
+
+window.addEventListener('popstate', (e) => {
+    if (e.state && e.state.page) {
+        window.replicationManager.navigateTo(e.state.page);
+    }
+});

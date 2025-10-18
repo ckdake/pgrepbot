@@ -1,4 +1,4 @@
-.PHONY: help setup start stop clean run test lint lint-fix build status
+.PHONY: help setup start stop clean run test test-unit test-integration test-e2e test-performance test-security test-data lint lint-fix build status
 
 # Default target
 help:
@@ -6,23 +6,32 @@ help:
 	@echo ""
 	@echo "🚀 Simple Operations:"
 	@echo "  make setup       - Set up development environment (first time only)"
-	@echo "  make start       - Start all services and application"
+	@echo "  make start       - Start all services (LocalStack, Redis, PostgreSQL)"
 	@echo "  make stop        - Stop all services"
+	@echo "  make run         - Run application (services must be started first)"
 	@echo "  make clean       - Clean up everything and start fresh"
 	@echo ""
 	@echo "🔧 Development:"
-	@echo "  make run         - Run application only (services must be started)"
 	@echo "  make validate    - Validate all services and application are working"
-	@echo "  make test        - Run test suite with coverage"
 	@echo "  make lint        - Run code quality checks"
+	@echo ""
+	@echo "🧪 Testing:"
+	@echo "  make test        - Run comprehensive test suite with coverage"
+	@echo "  make test-unit   - Run unit tests only (fast)"
+	@echo "  make test-integration - Run integration tests"
+	@echo "  make test-e2e    - Run end-to-end workflow tests"
+	@echo "  make test-performance - Run performance and load tests"
+	@echo "  make test-security - Run security and validation tests"
+	@echo "  make test-data   - Generate comprehensive test data"
 	@echo ""
 	@echo "📦 Production:"
 	@echo "  make build       - Build production Docker image"
 	@echo ""
 	@echo "🎯 Quick Start:"
 	@echo "  1. make setup    (first time only)"
-	@echo "  2. make start    (starts everything)"
-	@echo "  3. Visit http://localhost:8000"
+	@echo "  2. make start    (starts services)"
+	@echo "  3. make run      (starts application)"
+	@echo "  4. Visit http://localhost:8000"
 
 
 
@@ -41,11 +50,11 @@ setup:
 	@echo "✅ Setup complete!"
 	@echo ""
 	@echo "💡 Next steps:"
-	@echo "  1. make dev-services"
+	@echo "  1. make start"
 	@echo "  2. make run"
 
-# Start supporting services (LocalStack, Redis, PostgreSQL)
-dev-services:
+# Start all services (LocalStack, Redis, PostgreSQL)
+start:
 	@echo "🐳 Starting development services..."
 	@docker-compose -f docker-compose.services.yml up -d
 	@echo ""
@@ -65,11 +74,16 @@ dev-services:
 	else \
 		echo "⚠️  Virtual environment not found. Run 'make setup' first to populate test data."; \
 	fi
+	@echo ""
+	@echo "💡 Next step: make run"
 
-# Stop development services
-dev-services-stop:
+# Stop all services
+stop:
+	@echo "🛑 Stopping application..."
+	@pkill -f "uvicorn app.main:app" || echo "No uvicorn process found"
 	@echo "🛑 Stopping development services..."
 	@docker-compose -f docker-compose.services.yml down
+	@echo "✅ All services stopped"
 
 # Run the application locally
 run:
@@ -104,7 +118,7 @@ test:
 		echo "❌ Virtual environment not found. Run 'make setup' first."; \
 		exit 1; \
 	fi
-	@echo "🧪 Running test suite with coverage..."
+	@echo "🧪 Running comprehensive test suite with coverage..."
 	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
 	export AWS_ACCESS_KEY_ID=test && \
 	export AWS_SECRET_ACCESS_KEY=test && \
@@ -112,9 +126,107 @@ test:
 	export REDIS_HOST=localhost && \
 	export REDIS_PORT=6379 && \
 	export REDIS_URL=redis://localhost:6379 && \
-	./venv/bin/python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=html
+	./venv/bin/python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=50
 	@echo ""
 	@echo "📊 Coverage report generated in htmlcov/index.html"
+
+# Run unit tests only (fast)
+test-unit:
+	@if [ ! -d "venv" ]; then \
+		echo "❌ Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@echo "⚡ Running unit tests..."
+	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
+	export AWS_ACCESS_KEY_ID=test && \
+	export AWS_SECRET_ACCESS_KEY=test && \
+	export AWS_DEFAULT_REGION=us-east-1 && \
+	export REDIS_HOST=localhost && \
+	export REDIS_PORT=6379 && \
+	export REDIS_URL=redis://localhost:6379 && \
+	./venv/bin/python -m pytest tests/ -m "unit" -v --tb=short
+
+# Run integration tests
+test-integration:
+	@if [ ! -d "venv" ]; then \
+		echo "❌ Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@echo "🔗 Running integration tests..."
+	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
+	export AWS_ACCESS_KEY_ID=test && \
+	export AWS_SECRET_ACCESS_KEY=test && \
+	export AWS_DEFAULT_REGION=us-east-1 && \
+	export REDIS_HOST=localhost && \
+	export REDIS_PORT=6379 && \
+	export REDIS_URL=redis://localhost:6379 && \
+	./venv/bin/python -m pytest tests/ -m "integration" -v --tb=short
+
+# Run end-to-end tests
+test-e2e:
+	@if [ ! -d "venv" ]; then \
+		echo "❌ Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@echo "🎯 Running end-to-end tests..."
+	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
+	export AWS_ACCESS_KEY_ID=test && \
+	export AWS_SECRET_ACCESS_KEY=test && \
+	export AWS_DEFAULT_REGION=us-east-1 && \
+	export REDIS_HOST=localhost && \
+	export REDIS_PORT=6379 && \
+	export REDIS_URL=redis://localhost:6379 && \
+	./venv/bin/python -m pytest tests/ -m "e2e" -v --tb=short
+
+# Run performance tests
+test-performance:
+	@if [ ! -d "venv" ]; then \
+		echo "❌ Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@echo "🚀 Running performance tests..."
+	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
+	export AWS_ACCESS_KEY_ID=test && \
+	export AWS_SECRET_ACCESS_KEY=test && \
+	export AWS_DEFAULT_REGION=us-east-1 && \
+	export REDIS_HOST=localhost && \
+	export REDIS_PORT=6379 && \
+	export REDIS_URL=redis://localhost:6379 && \
+	./venv/bin/python -m pytest tests/ -m "performance" -v --tb=short
+
+# Run security tests
+test-security:
+	@if [ ! -d "venv" ]; then \
+		echo "❌ Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@echo "🔒 Running security tests..."
+	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
+	export AWS_ACCESS_KEY_ID=test && \
+	export AWS_SECRET_ACCESS_KEY=test && \
+	export AWS_DEFAULT_REGION=us-east-1 && \
+	export REDIS_HOST=localhost && \
+	export REDIS_PORT=6379 && \
+	export REDIS_URL=redis://localhost:6379 && \
+	./venv/bin/python -m pytest tests/ -m "security" -v --tb=short
+
+# Generate test data for comprehensive testing
+test-data:
+	@if [ ! -d "venv" ]; then \
+		echo "❌ Virtual environment not found. Run 'make setup' first."; \
+		exit 1; \
+	fi
+	@echo "📊 Generating comprehensive test data..."
+	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
+	export AWS_ACCESS_KEY_ID=test && \
+	export AWS_SECRET_ACCESS_KEY=test && \
+	export AWS_DEFAULT_REGION=us-east-1 && \
+	export REDIS_HOST=localhost && \
+	export REDIS_PORT=6379 && \
+	export REDIS_URL=redis://localhost:6379 && \
+	./venv/bin/python scripts/generate_test_data.py
+
+
 
 
 

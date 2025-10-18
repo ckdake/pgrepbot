@@ -24,7 +24,16 @@ class BackgroundTaskManager:
         self.running = False
         
         # Initialize services
-        self.connection_manager = PostgreSQLConnectionManager(redis_client)
+        from app.services.aws_secrets import SecretsManagerClient
+        from app.services.aws_rds import RDSClient
+        
+        secrets_client = SecretsManagerClient()
+        rds_client = RDSClient()
+        
+        self.connection_manager = PostgreSQLConnectionManager(
+            secrets_client=secrets_client,
+            rds_client=rds_client
+        )
         self.replication_service = ReplicationDiscoveryService(self.connection_manager, redis_client)
         self.alerting_service = AlertingService(
             redis_client, self.connection_manager, self.replication_service
