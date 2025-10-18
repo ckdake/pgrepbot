@@ -17,6 +17,17 @@ A web-based tool for centralized management of PostgreSQL logical replication ac
 - 📊 **Visual Topology**: Interactive visualization of replication topology
 - 🔔 **Alerting**: Configurable alerts for replication lag and failures
 
+## Dashboard
+
+![Dashboard Screenshot](docs/images/screenshot.png)
+
+The dashboard provides a comprehensive view of your PostgreSQL replication topology with:
+- **Visual topology diagram** showing database connections and replication streams
+- **Health status indicators** with response times for each database
+- **Alert badges** on databases with active issues
+- **Interactive layout** - drag nodes to arrange the topology as needed
+- **Real-time monitoring** with automatic refresh and countdown timer
+
 ## Quick Start
 
 ### Prerequisites
