@@ -16,9 +16,9 @@ class ReplicationManager {
                 ...options.headers
             }
         };
-        
+
         const response = await fetch(url, { ...defaultOptions, ...options });
-        
+
         if (!response.ok) {
             if (response.status === 401) {
                 // Redirect to login if unauthorized
@@ -27,7 +27,7 @@ class ReplicationManager {
             }
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        
+
         return response.json();
     }
 
@@ -55,11 +55,11 @@ class ReplicationManager {
         this.currentPage = page;
         this.updateActiveNav();
         this.loadPageContent(page);
-        
+
         // Update URL without page reload
         const url = new URL(window.location);
         url.searchParams.set('page', page);
-        window.history.pushState({page}, '', url);
+        window.history.pushState({ page }, '', url);
     }
 
     updateActiveNav() {
@@ -86,9 +86,6 @@ class ReplicationManager {
             switch (page) {
                 case 'dashboard':
                     await this.loadDashboard();
-                    break;
-                case 'topology':
-                    await this.loadTopology();
                     break;
                 case 'databases':
                     await this.loadDatabases();
@@ -125,11 +122,11 @@ class ReplicationManager {
         const systemStatus = await this.fetchSystemStatus().catch(error => ({
             status: 'error', icon: '❌', message: `System status error: ${error.message}`
         }));
-        
+
         const dbStatus = await this.fetchDatabaseStatus().catch(error => ({
             status: 'error', icon: '❌', healthy: 0, total: 0, avgResponseTime: 0
         }));
-        
+
         const replicationStatus = await this.fetchReplicationStatus().catch(error => ({
             status: 'error', icon: '❌', active: 0, total: 0, avgLag: 0
         }));
@@ -141,93 +138,65 @@ class ReplicationManager {
         const content = `
             <h1 class="page-title">Dashboard</h1>
             
-            <div class="row">
-                <div class="col-3">
-                    <div class="card">
-                        <div class="card-header">System Status</div>
-                        <div class="card-body">
-                            <div class="status ${systemStatus.status}">
-                                <span>${systemStatus.icon}</span>
-                                ${systemStatus.message}
-                            </div>
-                            <div class="mt-2">
-                                <small>Last updated: ${new Date().toLocaleTimeString()}</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-3">
-                    <div class="card">
-                        <div class="card-header">Databases</div>
-                        <div class="card-body">
-                            <div class="status ${dbStatus.status}">
-                                <span>${dbStatus.icon}</span>
-                                ${dbStatus.healthy}/${dbStatus.total} healthy
-                            </div>
-                            <div class="mt-2">
-                                <small>Response time: ${dbStatus.avgResponseTime}ms</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-3">
-                    <div class="card">
-                        <div class="card-header">Replication Streams</div>
-                        <div class="card-body">
-                            <div class="status ${replicationStatus.status}">
-                                <span>${replicationStatus.icon}</span>
-                                ${replicationStatus.active}/${replicationStatus.total} active
-                            </div>
-                            <div class="mt-2">
-                                <small>Avg lag: ${replicationStatus.avgLag}ms</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
-                <div class="col-3">
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span>Alerts</span>
-                                <a href="#" data-page="alerts" class="btn btn-outline-primary btn-sm">View All</a>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="status ${alertsStatus.status}">
-                                <span>${alertsStatus.icon}</span>
-                                ${alertsStatus.total === 0 ? 'No active alerts' : `${alertsStatus.total} active`}
-                            </div>
-                            <div class="mt-2">
-                                ${alertsStatus.total > 0 ? 
-                                    `<small>
-                                        ${alertsStatus.critical > 0 ? `❌ ${alertsStatus.critical} critical` : ''}
-                                        ${alertsStatus.critical > 0 && alertsStatus.warning > 0 ? ', ' : ''}
-                                        ${alertsStatus.warning > 0 ? `⚠️ ${alertsStatus.warning} warning` : ''}
-                                        ${alertsStatus.topAlert ? `<br><strong>Latest:</strong> ${alertsStatus.topAlert}` : ''}
-                                    </small>` :
-                                    '<small>All systems normal</small>'
-                                }
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
             <div class="card">
-                <div class="card-header">Recent Activity</div>
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Replication Topology</span>
+                        <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.refreshTopology()">
+                            <span id="refresh-icon">🔄</span> Refresh
+                        </button>
+                    </div>
+                </div>
                 <div class="card-body">
-                    <div id="recent-activity">Loading recent activity...</div>
+                    <div id="topology-container" style="height: 100%; min-height: 400px; border: 1px solid #dee2e6; border-radius: 4px;">
+                        <div class="text-center" style="padding: 2rem;">
+                            <div class="spinner"></div>
+                            <div class="mt-2">Loading topology...</div>
+                        </div>
+                    </div>
                 </div>
             </div>
+
+
         `;
 
         document.getElementById('main-content').innerHTML = content;
-        
-        // Load recent activity
-        this.loadRecentActivity();
+
+        // Update navigation alert indicator
+        this.updateNavigationAlertIndicator(alertsStatus);
+
+        // Load topology visualization
+        this.loadTopologyVisualization();
+    }
+
+    updateNavigationAlertIndicator(alertsStatus) {
+        const indicator = document.getElementById('alert-indicator');
+        const icon = indicator?.querySelector('.alert-icon');
+        const count = indicator?.querySelector('.alert-count');
+
+        if (!indicator || !icon || !count) return;
+
+        if (alertsStatus.total === 0) {
+            // No alerts - show green checkmark
+            icon.textContent = '✅';
+            count.textContent = '';
+            indicator.title = 'All systems healthy';
+        } else {
+            // Has alerts - show appropriate icon and count
+            if (alertsStatus.critical > 0) {
+                icon.textContent = '❌';
+                indicator.title = `${alertsStatus.critical} critical alert${alertsStatus.critical > 1 ? 's' : ''}`;
+            } else if (alertsStatus.warning > 0) {
+                icon.textContent = '⚠️';
+                indicator.title = `${alertsStatus.warning} warning alert${alertsStatus.warning > 1 ? 's' : ''}`;
+            }
+            count.textContent = alertsStatus.total;
+        }
+
+        // Show the indicator
+        indicator.style.display = 'inline';
     }
 
     async loadTopology() {
@@ -275,7 +244,7 @@ class ReplicationManager {
         `;
 
         document.getElementById('main-content').innerHTML = content;
-        
+
         // Load topology data and render visualization
         await this.loadTopologyVisualization();
     }
@@ -395,7 +364,7 @@ class ReplicationManager {
         `;
 
         document.getElementById('main-content').innerHTML = content;
-        
+
         // Load databases table
         await this.loadDatabaseConfigsTable();
     }
@@ -425,7 +394,7 @@ class ReplicationManager {
         `;
 
         document.getElementById('main-content').innerHTML = content;
-        
+
         // Load replication streams
         await this.loadReplicationStreams();
     }
@@ -509,10 +478,10 @@ class ReplicationManager {
         `;
 
         document.getElementById('main-content').innerHTML = content;
-        
+
         // Load migration history
         await this.loadMigrationHistory();
-        
+
         // Setup WebSocket for real-time progress if available
         this.setupMigrationWebSocket();
     }
@@ -560,10 +529,10 @@ class ReplicationManager {
         try {
             const data = await this.apiCall('/api/replication/discover');
             const activeStreams = [...data.logical_streams, ...data.physical_streams].filter(s => s.status === 'active');
-            const avgLag = activeStreams.length > 0 
+            const avgLag = activeStreams.length > 0
                 ? Math.round(activeStreams.reduce((sum, s) => sum + (s.lag_seconds * 1000), 0) / activeStreams.length)
                 : 0;
-            
+
             return {
                 status: activeStreams.length === data.total_streams ? 'healthy' : 'warning',
                 icon: activeStreams.length === data.total_streams ? '✅' : '⚠️',
@@ -588,10 +557,10 @@ class ReplicationManager {
                 this.apiCall('/api/alerts/health'),
                 this.apiCall('/api/alerts/active')
             ]);
-            
+
             const criticalAlerts = activeAlerts.filter(a => a.severity === 'critical');
             const warningAlerts = activeAlerts.filter(a => a.severity === 'warning');
-            
+
             // Clean up alert title for display
             const cleanAlertTitle = (title) => {
                 return title
@@ -600,12 +569,12 @@ class ReplicationManager {
                     .replace('Long Running Queries Detected', 'Slow Queries')
                     .replace('Database Connection Failure', 'DB Connection Failed');
             };
-            
+
             const topAlert = activeAlerts.length > 0 ? cleanAlertTitle(activeAlerts[0].title) : null;
-            
+
             let status = 'healthy';
             let icon = '✅';
-            
+
             if (criticalAlerts.length > 0) {
                 status = 'error';
                 icon = '❌';
@@ -613,7 +582,7 @@ class ReplicationManager {
                 status = 'warning';
                 icon = '⚠️';
             }
-            
+
             return {
                 status,
                 icon,
@@ -634,19 +603,7 @@ class ReplicationManager {
         }
     }
 
-    async loadRecentActivity() {
-        // Placeholder for recent activity
-        const activityContainer = document.getElementById('recent-activity');
-        if (activityContainer) {
-            activityContainer.innerHTML = `
-                <div class="text-muted">
-                    <div>• Replication discovery completed at ${new Date().toLocaleTimeString()}</div>
-                    <div>• Database health check passed at ${new Date(Date.now() - 60000).toLocaleTimeString()}</div>
-                    <div>• System startup completed at ${new Date(Date.now() - 300000).toLocaleTimeString()}</div>
-                </div>
-            `;
-        }
-    }
+
 
     async loadTopologyVisualization() {
         try {
@@ -654,19 +611,19 @@ class ReplicationManager {
                 credentials: 'same-origin'
             });
             const data = await response.json();
-            
+
             // Initialize topology visualization if not already done
             if (!this.topologyViz) {
                 this.topologyViz = new TopologyVisualization('topology-container');
             }
-            
+
             // Load topology data
             await this.topologyViz.loadTopology();
-            
+
             // Update databases and streams lists
             this.updateDatabasesList(data.databases);
             this.updateStreamsList(data.streams);
-            
+
         } catch (error) {
             console.error('Error loading topology:', error);
             document.getElementById('topology-container').innerHTML = `
@@ -682,13 +639,13 @@ class ReplicationManager {
 
     renderTopologyGraph(data) {
         const container = document.getElementById('topology-container');
-        
+
         // Simple topology visualization (would be enhanced with D3.js)
         const nodes = data.topology_map.nodes;
         const edges = data.topology_map.edges;
-        
+
         let html = '<div class="p-3"><h5>Topology Graph</h5>';
-        
+
         // Simple text-based representation for now
         nodes.forEach(node => {
             const connections = edges.filter(e => e.source === node.id || e.target === node.id);
@@ -700,7 +657,7 @@ class ReplicationManager {
                 </div>
             `;
         });
-        
+
         html += '</div>';
         container.innerHTML = html;
     }
@@ -708,7 +665,7 @@ class ReplicationManager {
     updateDatabasesList(databases) {
         const container = document.getElementById('databases-list');
         if (!container) return;
-        
+
         let html = '';
         databases.forEach(db => {
             html += `
@@ -725,14 +682,14 @@ class ReplicationManager {
                 </div>
             `;
         });
-        
+
         container.innerHTML = html || '<div class="text-muted">No databases found</div>';
     }
 
     updateStreamsList(streams) {
         const container = document.getElementById('streams-list');
         if (!container) return;
-        
+
         let html = '';
         streams.forEach(stream => {
             html += `
@@ -749,7 +706,7 @@ class ReplicationManager {
                 </div>
             `;
         });
-        
+
         container.innerHTML = html || '<div class="text-muted">No replication streams found</div>';
     }
 
@@ -759,7 +716,7 @@ class ReplicationManager {
                 credentials: 'same-origin'
             });
             const data = await response.json();
-            
+
             let html = `
                 <table class="table">
                     <thead>
@@ -774,7 +731,7 @@ class ReplicationManager {
                     </thead>
                     <tbody>
             `;
-            
+
             data.databases.forEach(db => {
                 html += `
                     <tr>
@@ -795,11 +752,11 @@ class ReplicationManager {
                     </tr>
                 `;
             });
-            
+
             html += '</tbody></table>';
-            
+
             document.getElementById('databases-table').innerHTML = html;
-            
+
         } catch (error) {
             document.getElementById('databases-table').innerHTML = `
                 <div class="status error">
@@ -816,9 +773,9 @@ class ReplicationManager {
                 credentials: 'same-origin'
             });
             const data = await response.json();
-            
+
             const allStreams = [...data.logical_streams, ...data.physical_streams];
-            
+
             let html = `
                 <table class="table">
                     <thead>
@@ -834,7 +791,7 @@ class ReplicationManager {
                     </thead>
                     <tbody>
             `;
-            
+
             allStreams.forEach(stream => {
                 html += `
                     <tr>
@@ -860,15 +817,15 @@ class ReplicationManager {
                     </tr>
                 `;
             });
-            
+
             html += '</tbody></table>';
-            
+
             if (allStreams.length === 0) {
                 html = '<div class="text-muted text-center p-4">No replication streams found</div>';
             }
-            
+
             document.getElementById('replication-streams').innerHTML = html;
-            
+
         } catch (error) {
             document.getElementById('replication-streams').innerHTML = `
                 <div class="status error">
@@ -883,10 +840,10 @@ class ReplicationManager {
         try {
             const response = await fetch('/api/migrations/history');
             const data = await response.json();
-            
+
             const container = document.getElementById('migration-history');
             if (!container) return;
-            
+
             if (data.migrations && data.migrations.length > 0) {
                 let html = `
                     <table class="table">
@@ -903,12 +860,12 @@ class ReplicationManager {
                         </thead>
                         <tbody>
                 `;
-                
+
                 data.migrations.forEach(migration => {
-                    const successRate = migration.total_databases > 0 
+                    const successRate = migration.total_databases > 0
                         ? Math.round((migration.successful_databases / migration.total_databases) * 100)
                         : 0;
-                    
+
                     html += `
                         <tr>
                             <td><code>${migration.execution_id.substring(0, 8)}...</code></td>
@@ -929,7 +886,7 @@ class ReplicationManager {
                         </tr>
                     `;
                 });
-                
+
                 html += '</tbody></table>';
                 container.innerHTML = html;
             } else {
@@ -939,7 +896,7 @@ class ReplicationManager {
                     </div>
                 `;
             }
-            
+
         } catch (error) {
             const container = document.getElementById('migration-history');
             if (container) {
@@ -987,7 +944,7 @@ ON CONFLICT (username) DO NOTHING;`;
 
     async validateMigration() {
         const sqlScript = document.getElementById('migration-sql').value.trim();
-        
+
         if (!sqlScript) {
             alert('Please enter a SQL script to validate');
             return;
@@ -1006,28 +963,28 @@ ON CONFLICT (username) DO NOTHING;`;
             });
 
             const result = await response.json();
-            
+
             if (result.success) {
                 const validation = result.validation_results;
                 let output = `<div class="status healthy">✓ Validation Successful</div><br>`;
                 output += `<strong>Statement Count:</strong> ${validation.statement_count}<br>`;
                 output += `<strong>Target Databases:</strong> ${validation.target_databases}<br>`;
                 output += `<strong>Estimated Time:</strong> ${validation.estimated_execution_time}<br><br>`;
-                
+
                 if (validation.warnings.length > 0) {
                     output += `<div class="status warning">⚠️ Warnings:</div>`;
                     validation.warnings.forEach(warning => {
                         output += `<div class="text-warning">• ${warning}</div>`;
                     });
                 }
-                
+
                 if (validation.errors.length > 0) {
                     output += `<div class="status error">❌ Errors:</div>`;
                     validation.errors.forEach(error => {
                         output += `<div class="text-danger">• ${error}</div>`;
                     });
                 }
-                
+
                 document.getElementById('migration-results').innerHTML = output;
             } else {
                 document.getElementById('migration-results').innerHTML = `
@@ -1046,7 +1003,7 @@ ON CONFLICT (username) DO NOTHING;`;
 
     async executeMigration() {
         const sqlScript = document.getElementById('migration-sql').value.trim();
-        
+
         if (!sqlScript) {
             alert('Please enter a SQL script to execute');
             return;
@@ -1063,7 +1020,7 @@ ON CONFLICT (username) DO NOTHING;`;
             // Show progress
             this.showMigrationProgress();
             this.updateMigrationStatus('Starting migration execution...');
-            
+
             const executeBtn = document.getElementById('execute-btn');
             const executeIcon = document.getElementById('execute-icon');
             executeBtn.disabled = true;
@@ -1083,48 +1040,48 @@ ON CONFLICT (username) DO NOTHING;`;
             });
 
             const result = await response.json();
-            
+
             // Display results
             let output = `<div class="status ${result.success ? 'healthy' : 'error'}">
                 ${result.success ? '✅' : '❌'} ${result.message}
             </div><br>`;
-            
+
             output += `<strong>Execution Summary:</strong><br>`;
             output += `• Total Databases: ${result.total_databases}<br>`;
             output += `• Successful: ${result.successful_databases}<br>`;
             output += `• Failed: ${result.failed_databases}<br>`;
             output += `• Execution Time: ${Math.round(result.execution_time_ms)}ms<br>`;
-            
+
             if (result.rollback_performed) {
                 output += `• <span class="text-warning">Rollback Performed</span><br>`;
             }
-            
+
             output += `<br><strong>Database Results:</strong><br>`;
-            
+
             result.results.forEach(dbResult => {
                 output += `<div class="mb-2 p-2 border-left" style="border-left: 3px solid ${dbResult.success ? '#28a745' : '#dc3545'};">`;
                 output += `<strong>${dbResult.database_name}</strong><br>`;
                 output += `Status: ${dbResult.success ? 'Success' : 'Failed'}<br>`;
                 output += `Time: ${Math.round(dbResult.execution_time_ms)}ms<br>`;
-                
+
                 if (dbResult.rows_affected !== null) {
                     output += `Rows Affected: ${dbResult.rows_affected}<br>`;
                 }
-                
+
                 if (dbResult.error_message) {
                     output += `<span class="text-danger">Error: ${dbResult.error_message}</span><br>`;
                 }
-                
+
                 output += `</div>`;
             });
-            
+
             document.getElementById('migration-results').innerHTML = output;
-            
+
             // Update migration history
             await this.loadMigrationHistory();
-            
+
             this.updateMigrationStatus(result.success ? 'Migration completed successfully' : 'Migration failed');
-            
+
         } catch (error) {
             document.getElementById('migration-results').innerHTML = `
                 <div class="status error">❌ Execution Error</div><br>
@@ -1137,7 +1094,7 @@ ON CONFLICT (username) DO NOTHING;`;
             const executeIcon = document.getElementById('execute-icon');
             executeBtn.disabled = false;
             executeIcon.textContent = '▶️';
-            
+
             this.hideMigrationProgress();
         }
     }
@@ -1177,12 +1134,31 @@ ON CONFLICT (username) DO NOTHING;`;
     }
 
     setupAutoRefresh() {
-        // Auto-refresh dashboard every 30 seconds
+        // Auto-refresh dashboard data every 30 seconds without reloading the UI
         this.refreshInterval = setInterval(() => {
             if (this.currentPage === 'dashboard') {
-                this.loadDashboard();
+                this.refreshDashboardData();
             }
         }, 30000);
+    }
+
+    async refreshDashboardData() {
+        try {
+            // Only refresh the alert indicator and topology data, not the entire UI
+            const alertsStatus = await this.fetchAlertsStatus().catch(error => ({
+                status: 'error', icon: '❌', critical: 0, warning: 0, total: 0, topAlert: null
+            }));
+
+            // Update navigation alert indicator
+            this.updateNavigationAlertIndicator(alertsStatus);
+
+            // Refresh topology data if the visualization exists
+            if (this.topologyViz) {
+                await this.topologyViz.loadTopology();
+            }
+        } catch (error) {
+            console.error('Error refreshing dashboard data:', error);
+        }
     }
 
     // Utility methods
@@ -1191,9 +1167,9 @@ ON CONFLICT (username) DO NOTHING;`;
         if (icon) {
             icon.style.animation = 'spin 1s linear infinite';
         }
-        
+
         await this.loadTopologyVisualization();
-        
+
         if (icon) {
             icon.style.animation = '';
         }
@@ -1203,7 +1179,7 @@ ON CONFLICT (username) DO NOTHING;`;
         try {
             const response = await fetch(`/api/databases/test/${databaseId}`);
             const data = await response.json();
-            
+
             alert(`Database test result:\nStatus: ${data.is_healthy ? 'Healthy' : 'Error'}\nResponse time: ${data.response_time_ms}ms`);
         } catch (error) {
             alert(`Error testing database: ${error.message}`);
@@ -1214,7 +1190,7 @@ ON CONFLICT (username) DO NOTHING;`;
         try {
             const response = await fetch(`/api/replication/streams/${streamId}/metrics`);
             const data = await response.json();
-            
+
             alert(`Stream metrics:\nLag: ${data.lag_seconds}s\nWAL Position: ${data.wal_position}\nSynced Tables: ${data.synced_tables}/${data.total_tables}`);
         } catch (error) {
             alert(`Error loading stream metrics: ${error.message}`);
@@ -1225,7 +1201,7 @@ ON CONFLICT (username) DO NOTHING;`;
         try {
             const response = await fetch('/api/database-config/');
             const data = await response.json();
-            
+
             let html = `
                 <table class="table">
                     <thead>
@@ -1241,7 +1217,7 @@ ON CONFLICT (username) DO NOTHING;`;
                     </thead>
                     <tbody>
             `;
-            
+
             if (data.database_configs && data.database_configs.length > 0) {
                 data.database_configs.forEach(config => {
                     html += `
@@ -1283,18 +1259,18 @@ ON CONFLICT (username) DO NOTHING;`;
                     </tr>
                 `;
             }
-            
+
             html += '</tbody></table>';
-            
+
             document.getElementById('databases-table').innerHTML = html;
-            
+
             // Test all configurations to get status
             if (data.database_configs && data.database_configs.length > 0) {
                 data.database_configs.forEach(config => {
                     this.testDatabaseConfig(config.id, true);
                 });
             }
-            
+
         } catch (error) {
             document.getElementById('databases-table').innerHTML = `
                 <div class="status error">
@@ -1318,7 +1294,7 @@ ON CONFLICT (username) DO NOTHING;`;
         try {
             const form = document.getElementById('add-database-form');
             const formData = new FormData(form);
-            
+
             const requestData = {
                 name: formData.get('name'),
                 host: formData.get('host'),
@@ -1501,7 +1477,7 @@ ON CONFLICT (username) DO NOTHING;`;
         `;
 
         document.getElementById('main-content').innerHTML = content;
-        
+
         // Load alerts data
         await this.loadAlertsData();
     }
@@ -1516,11 +1492,11 @@ ON CONFLICT (username) DO NOTHING;`;
             // Load active alerts
             const activeAlertsResponse = await fetch('/api/alerts/active');
             const activeAlerts = await activeAlertsResponse.json();
-            
+
             // Render combined system status and alerts
             this.renderCombinedSystemStatus(healthData, activeAlerts);
             this.renderActiveAlertsTable(activeAlerts);
-            
+
             // Load monitoring checks status
             this.renderMonitoringChecks(healthData, activeAlerts);
 
@@ -1569,15 +1545,15 @@ ON CONFLICT (username) DO NOTHING;`;
             alertsHtml = '<div class="text-muted">No active alerts</div>';
         } else {
             alertsHtml = '<div class="mt-3"><strong>Active Issues:</strong><ul class="mt-2">';
-            
+
             criticalAlerts.forEach(alert => {
                 alertsHtml += `<li class="text-danger">❌ ${alert.title}</li>`;
             });
-            
+
             warningAlerts.forEach(alert => {
                 alertsHtml += `<li class="text-warning">⚠️ ${alert.title}</li>`;
             });
-            
+
             alertsHtml += '</ul></div>';
         }
 
@@ -1604,28 +1580,28 @@ ON CONFLICT (username) DO NOTHING;`;
                     </div>
                 </div>
                 <div style="flex: 1;">
-                    ${activeAlerts.length === 0 ? 
-                        '<div class="text-center text-muted" style="padding: 2rem;"><div style="font-size: 2em;">✅</div><div>No active alerts</div></div>' :
-                        `<div class="mb-2"><strong>Active Issues (${activeAlerts.length})</strong></div>
+                    ${activeAlerts.length === 0 ?
+                '<div class="text-center text-muted" style="padding: 2rem;"><div style="font-size: 2em;">✅</div><div>No active alerts</div></div>' :
+                `<div class="mb-2"><strong>Active Issues (${activeAlerts.length})</strong></div>
                          <div class="alert-list">
-                            ${criticalAlerts.map(alert => 
-                                `<div class="alert-item critical mb-2 p-2" style="border-left: 4px solid #dc3545; background: #f8d7da; border-radius: 4px;">
+                            ${criticalAlerts.map(alert =>
+                    `<div class="alert-item critical mb-2 p-2" style="border-left: 4px solid #dc3545; background: #f8d7da; border-radius: 4px;">
                                     <div class="d-flex align-items-center">
                                         <span style="margin-right: 8px;">❌</span>
                                         <strong>${cleanAlertTitle(alert.title)}</strong>
                                     </div>
                                 </div>`
-                            ).join('')}
-                            ${warningAlerts.map(alert => 
-                                `<div class="alert-item warning mb-2 p-2" style="border-left: 4px solid #ffc107; background: #fff3cd; border-radius: 4px;">
+                ).join('')}
+                            ${warningAlerts.map(alert =>
+                    `<div class="alert-item warning mb-2 p-2" style="border-left: 4px solid #ffc107; background: #fff3cd; border-radius: 4px;">
                                     <div class="d-flex align-items-center">
                                         <span style="margin-right: 8px;">⚠️</span>
                                         <strong>${cleanAlertTitle(alert.title)}</strong>
                                     </div>
                                 </div>`
-                            ).join('')}
+                ).join('')}
                          </div>`
-                    }
+            }
                 </div>
             </div>
         `;
@@ -1887,7 +1863,7 @@ ON CONFLICT (username) DO NOTHING;`;
         try {
             const response = await fetch('/api/alerts/test-monitoring', { method: 'POST' });
             const result = await response.json();
-            
+
             if (result.success) {
                 // Refresh alerts after running monitoring
                 setTimeout(() => this.refreshAlerts(), 1000);
@@ -1901,7 +1877,7 @@ ON CONFLICT (username) DO NOTHING;`;
         try {
             const response = await fetch(`/api/alerts/${alertId}/acknowledge`, { method: 'POST' });
             const result = await response.json();
-            
+
             if (result.success) {
                 await this.refreshAlerts();
             }
@@ -1912,7 +1888,7 @@ ON CONFLICT (username) DO NOTHING;`;
 
     async resolveAlert(alertId) {
         const notes = prompt('Resolution notes (optional):');
-        
+
         try {
             const response = await fetch(`/api/alerts/${alertId}/resolve`, {
                 method: 'POST',
@@ -1920,7 +1896,7 @@ ON CONFLICT (username) DO NOTHING;`;
                 body: JSON.stringify({ notes: notes || '' })
             });
             const result = await response.json();
-            
+
             if (result.success) {
                 await this.refreshAlerts();
             }
@@ -1933,7 +1909,7 @@ ON CONFLICT (username) DO NOTHING;`;
         try {
             const response = await fetch('/api/alerts/thresholds');
             const thresholds = await response.json();
-            
+
             let html = `
                 <table class="table">
                     <thead>
@@ -1948,7 +1924,7 @@ ON CONFLICT (username) DO NOTHING;`;
                     </thead>
                     <tbody>
             `;
-            
+
             thresholds.forEach(threshold => {
                 html += `
                     <tr>
@@ -1961,12 +1937,12 @@ ON CONFLICT (username) DO NOTHING;`;
                     </tr>
                 `;
             });
-            
+
             html += '</tbody></table>';
-            
+
             document.getElementById('alert-thresholds-content').innerHTML = html;
             document.getElementById('alert-thresholds-modal').style.display = 'block';
-            
+
         } catch (error) {
             console.error('Error loading alert thresholds:', error);
         }

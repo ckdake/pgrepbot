@@ -12,6 +12,40 @@
     <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐘</text></svg>">
     
     {% block extra_head %}{% endblock %}
+    
+    <style>
+        body {
+            height: 100vh;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .main-content {
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .main-content .container {
+            height: 100%;
+        }
+        
+        #main-content {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .card:last-child {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .card:last-child .card-body {
+            flex: 1;
+        }
+    </style>
 </head>
 <body>
     {% if user %}
@@ -38,9 +72,6 @@
                     <a href="#" data-page="dashboard">Dashboard</a>
                 </li>
                 <li class="nav-tab">
-                    <a href="#" data-page="topology">Topology</a>
-                </li>
-                <li class="nav-tab">
                     <a href="#" data-page="databases">Databases</a>
                 </li>
                 <li class="nav-tab">
@@ -50,7 +81,13 @@
                     <a href="#" data-page="migrations">Migrations</a>
                 </li>
                 <li class="nav-tab">
-                    <a href="#" data-page="alerts">Alerts</a>
+                    <a href="#" data-page="alerts">
+                        Alerts
+                        <span id="alert-indicator" class="alert-indicator" style="display: none; margin-left: 0.5rem;">
+                            <span class="alert-icon" style="font-size: 0.8em;">✅</span>
+                            <span class="alert-count" style="font-size: 0.8em; margin-left: 0.2em; font-weight: bold;"></span>
+                        </span>
+                    </a>
                 </li>
             </ul>
         </div>

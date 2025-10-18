@@ -386,13 +386,25 @@ class AlertingService:
             critical_alerts = [a for a in active_alerts if a.severity == AlertSeverity.CRITICAL]
             warning_alerts = [a for a in active_alerts if a.severity == AlertSeverity.WARNING]
             
-            # Get database health
+            # Get database health from the database test API to avoid connection pool conflicts
             db_configs = await self._get_database_configs()
             healthy_dbs = 0
-            for db_config in db_configs:
-                health = self.connection_manager.get_health_status(db_config.id)
-                if health.is_healthy:
-                    healthy_dbs += 1
+            total_dbs = len(db_configs)
+            
+            try:
+                # Use the existing database test endpoint instead of creating new connections
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    response = await client.get("http://localhost:8000/api/databases/test")
+                    if response.status_code == 200:
+                        db_test_data = response.json()
+                        healthy_dbs = db_test_data.get("healthy_databases", 0)
+                        total_dbs = db_test_data.get("total_databases", len(db_configs))
+            except Exception as e:
+                logger.debug(f"Failed to get database health from API, using config count: {e}")
+                # Fallback to just using the config count
+                total_dbs = len(db_configs)
+                healthy_dbs = 0
                     
             # Get replication health (simplified)
             healthy_streams = 0
@@ -423,7 +435,7 @@ class AlertingService:
                 active_alerts=len(active_alerts),
                 critical_alerts=len(critical_alerts),
                 warning_alerts=len(warning_alerts),
-                total_databases=len(db_configs),
+                total_databases=total_dbs,
                 healthy_databases=healthy_dbs,
                 total_streams=total_streams,
                 healthy_streams=healthy_streams,

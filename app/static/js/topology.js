@@ -4,8 +4,9 @@ class TopologyVisualization {
     constructor(containerId) {
         this.containerId = containerId;
         this.container = document.getElementById(containerId);
-        this.width = 800;
-        this.height = 500;
+        // Use container dimensions instead of fixed values
+        this.width = this.container.clientWidth || 800;
+        this.height = this.container.clientHeight || 400;
         this.svg = null;
         this.simulation = null;
         this.nodes = [];
@@ -67,10 +68,39 @@ class TopologyVisualization {
 
     async loadTopology() {
         try {
-            const response = await fetch('/api/replication/topology');
-            const data = await response.json();
+            // Fetch topology, database health, and alerts data
+            const [topologyResponse, dbHealthResponse, alertsResponse] = await Promise.all([
+                fetch('/api/replication/topology'),
+                fetch('/api/databases/test'),
+                fetch('/api/alerts/active')
+            ]);
             
-            this.renderTopology(data);
+            const topologyData = await topologyResponse.json();
+            const dbHealthData = await dbHealthResponse.json();
+            const alertsData = await alertsResponse.json();
+            
+            // Create a map of database health by ID
+            this.dbHealthMap = {};
+            dbHealthData.databases.forEach(db => {
+                this.dbHealthMap[db.database_id] = {
+                    is_healthy: db.is_healthy,
+                    response_time_ms: db.response_time_ms,
+                    error_message: db.error_message
+                };
+            });
+            
+            // Create a map of alerts by database ID
+            this.alertsMap = {};
+            alertsData.forEach(alert => {
+                if (alert.database_id) {
+                    if (!this.alertsMap[alert.database_id]) {
+                        this.alertsMap[alert.database_id] = [];
+                    }
+                    this.alertsMap[alert.database_id].push(alert);
+                }
+            });
+            
+            this.renderTopology(topologyData);
             
         } catch (error) {
             console.error('Error loading topology:', error);
@@ -107,15 +137,29 @@ class TopologyVisualization {
             .attr('marker-end', 'url(#replication)')
             .style('opacity', 0.8);
 
-        // Add link labels
-        const linkLabel = this.topologyGroup.selectAll('.link-label')
+        // Add link labels (multi-line)
+        const linkLabelGroup = this.topologyGroup.selectAll('.link-label-group')
             .data(this.links)
-            .enter().append('text')
-            .attr('class', 'link-label')
+            .enter().append('g')
+            .attr('class', 'link-label-group');
+
+        // Add replication type label
+        linkLabelGroup.append('text')
+            .attr('class', 'link-type-label')
             .attr('text-anchor', 'middle')
             .attr('font-size', '10px')
-            .attr('fill', '#666')
-            .text(d => `${d.type} (${d.lag_seconds}s)`);
+            .attr('font-weight', 'bold')
+            .attr('fill', '#333')
+            .text(d => d.type);
+
+        // Add latency label with color coding
+        linkLabelGroup.append('text')
+            .attr('class', 'link-latency-label')
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '9px')
+            .attr('dy', '12px')
+            .attr('fill', d => this.getLatencyColor(d.lag_seconds))
+            .text(d => `${d.lag_seconds}s lag`);
 
         // Render nodes
         const node = this.topologyGroup.selectAll('.node')
@@ -151,7 +195,7 @@ class TopologyVisualization {
             .attr('fill', '#333')
             .text(d => d.name);
 
-        // Add node details
+        // Add node details (host:port)
         node.append('text')
             .attr('text-anchor', 'middle')
             .attr('dy', '58px')
@@ -159,9 +203,56 @@ class TopologyVisualization {
             .attr('fill', '#666')
             .text(d => `${d.host}:${d.port}`);
 
+        // Add health status details
+        node.append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dy', '70px')
+            .attr('font-size', '9px')
+            .attr('fill', d => this.getHealthTextColor(d))
+            .text(d => this.getHealthText(d));
+
+        // Add alert indicators for nodes with active alerts
+        node.filter(d => this.hasAlerts(d))
+            .append('circle')
+            .attr('class', 'alert-indicator')
+            .attr('cx', 20)
+            .attr('cy', -20)
+            .attr('r', 8)
+            .attr('fill', d => this.getAlertSeverityColor(d))
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 2);
+
+        node.filter(d => this.hasAlerts(d))
+            .append('text')
+            .attr('class', 'alert-emoji')
+            .attr('x', 20)
+            .attr('y', -20)
+            .attr('text-anchor', 'middle')
+            .attr('dy', '0.3em')
+            .attr('font-size', '10px')
+            .text(d => this.getAlertEmoji(d));
+
         // Add tooltips
         node.append('title')
-            .text(d => `${d.name}\n${d.role}\n${d.host}:${d.port}\nEnvironment: ${d.environment}`);
+            .text(d => {
+                let tooltip = `${d.name}\n${d.role}\n${d.host}:${d.port}\nEnvironment: ${d.environment}`;
+                
+                if (this.dbHealthMap && this.dbHealthMap[d.id]) {
+                    const health = this.dbHealthMap[d.id];
+                    if (health.is_healthy) {
+                        tooltip += `\nStatus: Healthy (${health.response_time_ms.toFixed(1)}ms)`;
+                    } else {
+                        tooltip += `\nStatus: Unhealthy`;
+                        if (health.error_message) {
+                            tooltip += `\nError: ${health.error_message}`;
+                        }
+                    }
+                } else {
+                    tooltip += `\nStatus: Unknown`;
+                }
+                
+                return tooltip;
+            });
 
         // Update positions on simulation tick
         this.simulation.on('tick', () => {
@@ -171,9 +262,8 @@ class TopologyVisualization {
                 .attr('x2', d => d.target.x)
                 .attr('y2', d => d.target.y);
 
-            linkLabel
-                .attr('x', d => (d.source.x + d.target.x) / 2)
-                .attr('y', d => (d.source.y + d.target.y) / 2);
+            linkLabelGroup
+                .attr('transform', d => `translate(${(d.source.x + d.target.x) / 2}, ${(d.source.y + d.target.y) / 2})`);
 
             node
                 .attr('transform', d => `translate(${d.x},${d.y})`);
@@ -187,14 +277,18 @@ class TopologyVisualization {
     }
 
     getNodeColor(node) {
-        switch (node.role) {
-            case 'primary':
-                return '#28a745'; // Green
-            case 'replica':
-                return '#17a2b8'; // Blue
-            default:
-                return '#6c757d'; // Gray
+        // Always use health status for coloring if available
+        if (this.dbHealthMap && this.dbHealthMap[node.id]) {
+            const health = this.dbHealthMap[node.id];
+            if (health.is_healthy) {
+                return '#28a745'; // Green for healthy (both primary and replica)
+            } else {
+                return '#dc3545'; // Red for unhealthy (both primary and replica)
+            }
         }
+        
+        // Fallback to neutral coloring when health is unknown
+        return '#6c757d'; // Gray for unknown status
     }
 
     getNodeIcon(node) {
@@ -205,6 +299,75 @@ class TopologyVisualization {
                 return '📋'; // Copy icon for replica
             default:
                 return '💾'; // Disk icon for others
+        }
+    }
+
+    getHealthText(node) {
+        if (this.dbHealthMap && this.dbHealthMap[node.id]) {
+            const health = this.dbHealthMap[node.id];
+            if (health.is_healthy) {
+                return `${health.response_time_ms.toFixed(1)}ms`;
+            } else {
+                return 'Connection Failed';
+            }
+        }
+        return 'Status Unknown';
+    }
+
+    getHealthTextColor(node) {
+        if (this.dbHealthMap && this.dbHealthMap[node.id]) {
+            const health = this.dbHealthMap[node.id];
+            if (health.is_healthy) {
+                return '#28a745'; // Green for healthy
+            } else {
+                return '#dc3545'; // Red for unhealthy
+            }
+        }
+        return '#6c757d'; // Gray for unknown
+    }
+
+    getLatencyColor(lagSeconds) {
+        // Color code latency based on performance
+        if (lagSeconds <= 1) {
+            return '#28a745'; // Green for excellent (≤1s)
+        } else if (lagSeconds <= 5) {
+            return '#ffc107'; // Yellow for good (1-5s)
+        } else if (lagSeconds <= 30) {
+            return '#fd7e14'; // Orange for concerning (5-30s)
+        } else {
+            return '#dc3545'; // Red for poor (>30s)
+        }
+    }
+
+    hasAlerts(node) {
+        return this.alertsMap && this.alertsMap[node.id] && this.alertsMap[node.id].length > 0;
+    }
+
+    getAlertSeverityColor(node) {
+        if (!this.hasAlerts(node)) return '#6c757d';
+        
+        const alerts = this.alertsMap[node.id];
+        const hasCritical = alerts.some(alert => alert.severity === 'critical');
+        const hasWarning = alerts.some(alert => alert.severity === 'warning');
+        
+        if (hasCritical) {
+            return '#dc3545'; // Red for critical
+        } else if (hasWarning) {
+            return '#ffc107'; // Yellow for warning
+        }
+        return '#17a2b8'; // Blue for info
+    }
+
+    getAlertEmoji(node) {
+        if (!this.hasAlerts(node)) return '';
+        
+        const alerts = this.alertsMap[node.id];
+        const hasCritical = alerts.some(alert => alert.severity === 'critical');
+        
+        if (hasCritical) {
+            return '❌'; // Critical alert
+        } else {
+            return '⚠️'; // Warning alert
         }
     }
 
@@ -227,10 +390,12 @@ class TopologyVisualization {
             .attr('transform', 'translate(20, 20)');
 
         const legendData = [
-            { color: '#28a745', label: 'Primary Database', icon: '🗄️' },
-            { color: '#17a2b8', label: 'Replica Database', icon: '📋' },
+            { color: '#28a745', label: 'Healthy Database', icon: '🗄️' },
+            { color: '#dc3545', label: 'Unhealthy Database', icon: '🗄️' },
             { color: '#28a745', label: 'Active Replication', type: 'line' },
-            { color: '#dc3545', label: 'Inactive Replication', type: 'line' }
+            { color: '#dc3545', label: 'Inactive Replication', type: 'line' },
+            { color: '#dc3545', label: 'Critical Alert', icon: '❌', type: 'alert' },
+            { color: '#ffc107', label: 'Warning Alert', icon: '⚠️', type: 'alert' }
         ];
 
         const legendItems = legend.selectAll('.legend-item')
@@ -243,7 +408,7 @@ class TopologyVisualization {
         legend.insert('rect', ':first-child')
             .attr('x', -10)
             .attr('y', -10)
-            .attr('width', 200)
+            .attr('width', 220)
             .attr('height', legendData.length * 25 + 10)
             .attr('fill', 'rgba(255, 255, 255, 0.9)')
             .attr('stroke', '#dee2e6')
@@ -260,7 +425,24 @@ class TopologyVisualization {
                     .attr('y2', 8)
                     .attr('stroke', d.color)
                     .attr('stroke-width', 3);
+            } else if (d.type === 'alert') {
+                // Alert badge
+                item.append('circle')
+                    .attr('cx', 10)
+                    .attr('cy', 8)
+                    .attr('r', 8)
+                    .attr('fill', d.color)
+                    .attr('stroke', '#fff')
+                    .attr('stroke-width', 2);
+                
+                item.append('text')
+                    .attr('x', 10)
+                    .attr('y', 12)
+                    .attr('text-anchor', 'middle')
+                    .attr('font-size', '10px')
+                    .text(d.icon);
             } else {
+                // Database node
                 item.append('circle')
                     .attr('cx', 10)
                     .attr('cy', 8)
