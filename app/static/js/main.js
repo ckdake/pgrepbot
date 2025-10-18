@@ -134,11 +134,15 @@ class ReplicationManager {
             status: 'error', icon: '❌', active: 0, total: 0, avgLag: 0
         }));
 
+        const alertsStatus = await this.fetchAlertsStatus().catch(error => ({
+            status: 'error', icon: '❌', critical: 0, warning: 0, total: 0, topAlert: null
+        }));
+
         const content = `
             <h1 class="page-title">Dashboard</h1>
             
             <div class="row">
-                <div class="col-4">
+                <div class="col-3">
                     <div class="card">
                         <div class="card-header">System Status</div>
                         <div class="card-body">
@@ -153,7 +157,7 @@ class ReplicationManager {
                     </div>
                 </div>
                 
-                <div class="col-4">
+                <div class="col-3">
                     <div class="card">
                         <div class="card-header">Databases</div>
                         <div class="card-body">
@@ -168,7 +172,7 @@ class ReplicationManager {
                     </div>
                 </div>
                 
-                <div class="col-4">
+                <div class="col-3">
                     <div class="card">
                         <div class="card-header">Replication Streams</div>
                         <div class="card-body">
@@ -178,6 +182,34 @@ class ReplicationManager {
                             </div>
                             <div class="mt-2">
                                 <small>Avg lag: ${replicationStatus.avgLag}ms</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-3">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span>Alerts</span>
+                                <a href="#" data-page="alerts" class="btn btn-outline-primary btn-sm">View All</a>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="status ${alertsStatus.status}">
+                                <span>${alertsStatus.icon}</span>
+                                ${alertsStatus.total === 0 ? 'No active alerts' : `${alertsStatus.total} active`}
+                            </div>
+                            <div class="mt-2">
+                                ${alertsStatus.total > 0 ? 
+                                    `<small>
+                                        ${alertsStatus.critical > 0 ? `❌ ${alertsStatus.critical} critical` : ''}
+                                        ${alertsStatus.critical > 0 && alertsStatus.warning > 0 ? ', ' : ''}
+                                        ${alertsStatus.warning > 0 ? `⚠️ ${alertsStatus.warning} warning` : ''}
+                                        ${alertsStatus.topAlert ? `<br><strong>Latest:</strong> ${alertsStatus.topAlert}` : ''}
+                                    </small>` :
+                                    '<small>All systems normal</small>'
+                                }
                             </div>
                         </div>
                     </div>
@@ -546,6 +578,58 @@ class ReplicationManager {
                 active: 0,
                 total: 0,
                 avgLag: 0
+            };
+        }
+    }
+
+    async fetchAlertsStatus() {
+        try {
+            const [healthData, activeAlerts] = await Promise.all([
+                this.apiCall('/api/alerts/health'),
+                this.apiCall('/api/alerts/active')
+            ]);
+            
+            const criticalAlerts = activeAlerts.filter(a => a.severity === 'critical');
+            const warningAlerts = activeAlerts.filter(a => a.severity === 'warning');
+            
+            // Clean up alert title for display
+            const cleanAlertTitle = (title) => {
+                return title
+                    .replace(/: \w+_\w+.*$/, '')
+                    .replace('Very Long Running Query', 'Long Running Query')
+                    .replace('Long Running Queries Detected', 'Slow Queries')
+                    .replace('Database Connection Failure', 'DB Connection Failed');
+            };
+            
+            const topAlert = activeAlerts.length > 0 ? cleanAlertTitle(activeAlerts[0].title) : null;
+            
+            let status = 'healthy';
+            let icon = '✅';
+            
+            if (criticalAlerts.length > 0) {
+                status = 'error';
+                icon = '❌';
+            } else if (warningAlerts.length > 0) {
+                status = 'warning';
+                icon = '⚠️';
+            }
+            
+            return {
+                status,
+                icon,
+                critical: criticalAlerts.length,
+                warning: warningAlerts.length,
+                total: activeAlerts.length,
+                topAlert
+            };
+        } catch (error) {
+            return {
+                status: 'error',
+                icon: '❌',
+                critical: 0,
+                warning: 0,
+                total: 0,
+                topAlert: null
             };
         }
     }
