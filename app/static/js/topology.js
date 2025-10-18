@@ -535,8 +535,8 @@ class TopologyVisualization {
 
     dragEnded(event, d) {
         if (!event.active) this.simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
+        // Keep the node pinned where the user dropped it
+        // d.fx and d.fy remain set to keep the node in place
     }
 
     // Public methods

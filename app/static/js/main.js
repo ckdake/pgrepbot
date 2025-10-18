@@ -142,10 +142,10 @@ class ReplicationManager {
 
             <div class="card">
                 <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                         <span>Replication Topology</span>
                         <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.refreshTopology()">
-                            <span id="refresh-icon">🔄</span> Refresh
+                            <span id="refresh-icon">🔄</span> <span id="refresh-countdown">30</span>
                         </button>
                     </div>
                 </div>
@@ -169,6 +169,9 @@ class ReplicationManager {
 
         // Load topology visualization
         this.loadTopologyVisualization();
+
+        // Initialize countdown display
+        setTimeout(() => this.updateRefreshCountdown(), 100);
     }
 
     updateNavigationAlertIndicator(alertsStatus) {
@@ -255,7 +258,7 @@ class ReplicationManager {
             
             <div class="card">
                 <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                         <span>Database Configurations</span>
                         <div>
                             <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.testAllConnections()">
@@ -375,7 +378,7 @@ class ReplicationManager {
             
             <div class="card">
                 <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                         <span>Replication Streams</span>
                         <div>
                             <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.discoverReplication()">
@@ -405,7 +408,7 @@ class ReplicationManager {
             
             <div class="card">
                 <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                         <span>Migration Execution</span>
                         <div>
                             <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.loadSampleMigration()">
@@ -1135,11 +1138,33 @@ ON CONFLICT (username) DO NOTHING;`;
 
     setupAutoRefresh() {
         // Auto-refresh dashboard data every 30 seconds without reloading the UI
-        this.refreshInterval = setInterval(() => {
-            if (this.currentPage === 'dashboard') {
-                this.refreshDashboardData();
+        this.refreshCountdown = 30;
+
+        // Update countdown every second
+        this.countdownInterval = setInterval(() => {
+            this.refreshCountdown--;
+            this.updateRefreshCountdown();
+
+            if (this.refreshCountdown <= 0) {
+                this.refreshCountdown = 30; // Reset countdown
+                if (this.currentPage === 'dashboard') {
+                    this.refreshDashboardData();
+                }
             }
-        }, 30000);
+        }, 1000);
+    }
+
+    updateRefreshCountdown() {
+        const countdownElement = document.getElementById('refresh-countdown');
+        if (countdownElement && this.currentPage === 'dashboard') {
+            if (this.refreshCountdown > 0) {
+                countdownElement.textContent = this.refreshCountdown;
+                countdownElement.style.opacity = '0.7';
+            } else {
+                countdownElement.textContent = '...';
+                countdownElement.style.opacity = '1';
+            }
+        }
     }
 
     async refreshDashboardData() {
@@ -1167,6 +1192,10 @@ ON CONFLICT (username) DO NOTHING;`;
         if (icon) {
             icon.style.animation = 'spin 1s linear infinite';
         }
+
+        // Reset countdown when manually refreshed
+        this.refreshCountdown = 30;
+        this.updateRefreshCountdown();
 
         await this.loadTopologyVisualization();
 
@@ -1421,7 +1450,7 @@ ON CONFLICT (username) DO NOTHING;`;
 
             <div class="card">
                 <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                         <span>Monitoring Checks</span>
                         <div>
                             <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.refreshAlerts()">
@@ -1447,7 +1476,7 @@ ON CONFLICT (username) DO NOTHING;`;
 
             <div class="card">
                 <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                         <span>Alert History</span>
                         <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.showAlertThresholds()">
                             ⚙️ Configure Thresholds
