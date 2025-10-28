@@ -3,7 +3,7 @@ Authentication and authorization models
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -66,7 +66,7 @@ class UserSession(BaseModel, RedisModelMixin):
 
     # Session timing
     created_at: DatetimeSerializer = Field(default_factory=datetime.utcnow)
-    expires_at: DatetimeSerializer = Field(default_factory=lambda: datetime.utcnow() + timedelta(hours=24))
+    expires_at: DatetimeSerializer = Field(default_factory=lambda: datetime.now(UTC) + timedelta(hours=24))
     last_activity: DatetimeSerializer = Field(default_factory=datetime.utcnow)
 
     # Session status
@@ -84,12 +84,12 @@ class UserSession(BaseModel, RedisModelMixin):
 
     def is_expired(self) -> bool:
         """Check if session is expired"""
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(UTC) > self.expires_at
 
     def extend_session(self, hours: int = 24) -> None:
         """Extend session expiration"""
-        self.expires_at = datetime.utcnow() + timedelta(hours=hours)
-        self.last_activity = datetime.utcnow()
+        self.expires_at = datetime.now(UTC) + timedelta(hours=hours)
+        self.last_activity = datetime.now(UTC)
 
 
 class AuthConfig(BaseModel, RedisModelMixin):

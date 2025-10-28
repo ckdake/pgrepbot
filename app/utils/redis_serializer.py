@@ -15,9 +15,18 @@ class RedisSerializer:
     """Utility class for serializing/deserializing Pydantic models to/from Redis"""
 
     @staticmethod
-    def serialize(model: BaseModel) -> str:
-        """Serialize a Pydantic model to JSON string for Redis storage"""
-        return model.model_dump_json()
+    def serialize(model: BaseModel | object) -> str:
+        """Serialize a Pydantic model or object to JSON string for Redis storage"""
+        if hasattr(model, "model_dump_json"):
+            return model.model_dump_json()
+        else:
+            # Handle non-Pydantic objects by converting to dict and serializing
+            import json
+
+            if hasattr(model, "__dict__"):
+                return json.dumps(model.__dict__, cls=DateTimeEncoder)
+            else:
+                return json.dumps(model, cls=DateTimeEncoder)
 
     @staticmethod
     def deserialize(data: str, model_class: type[T]) -> T:
@@ -66,10 +75,10 @@ class RedisModelMixin:
     def redis_key(self, prefix: str) -> str:
         """Generate Redis key for this model instance"""
         # Try different ID field names
-        for id_field in ["id", "session_id"]:
+        for id_field in ["id", "session_id", "migration_id"]:
             if hasattr(self, id_field):
                 return RedisSerializer.generate_key(prefix, getattr(self, id_field))
-        raise AttributeError("Model must have 'id' or 'session_id' attribute to generate Redis key")
+        raise AttributeError("Model must have 'id', 'session_id', or 'migration_id' attribute to generate Redis key")
 
     async def save_to_redis(self, redis_client, prefix: str | None = None) -> None:
         """Save this model to Redis"""

@@ -124,25 +124,26 @@ async def validate_replication():
 async def validate_application():
     """Validate application endpoints and functionality."""
     try:
-        import httpx
         import os
+
+        import httpx
 
         # Get auth key from environment
         auth_key = os.getenv("AUTH_KEY", "dev-auth-key-12345")
-        
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             # First authenticate to get session cookie
             auth_response = await client.post(
                 "http://localhost:8000/api/auth/login",
                 json={"auth_method": "auth_key", "auth_key": auth_key}
             )
-            
+
             if auth_response.status_code != 200:
                 logger.error(f"❌ Application: Authentication failed ({auth_response.status_code})")
                 return False
-            
+
             logger.info("✅ Application: Authentication successful")
-            
+
             # Test root endpoint
             response = await client.get("http://localhost:8000/")
             if response.status_code == 200:

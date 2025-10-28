@@ -157,6 +157,8 @@ markers = [
     "e2e: End-to-end tests that test complete workflows",
     "performance: Performance and load tests",
     "security: Security-focused tests",
+    "load: Load and stress tests",
+    "stress: Stress tests for system limits",
     "slow: Tests that take longer than 5 seconds",
 ]
 asyncio_mode = "auto"

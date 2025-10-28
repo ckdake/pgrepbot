@@ -7,9 +7,8 @@ import asyncio
 import json
 import logging
 import os
-import random
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import redis.asyncio as redis
 
@@ -26,10 +25,10 @@ async def generate_test_data():
             port=int(os.getenv("REDIS_PORT", "6379")),
             decode_responses=True
         )
-        
+
         await redis_client.ping()
         logger.info("✅ Connected to Redis")
-        
+
         # Generate some test database configurations
         test_databases = []
         for i in range(5):
@@ -48,14 +47,14 @@ async def generate_test_data():
                 "created_at": datetime.utcnow().isoformat(),
                 "updated_at": datetime.utcnow().isoformat(),
             }
-            
+
             # Store in Redis
             key = f"database_config:{db_config['id']}"
             await redis_client.set(key, json.dumps(db_config))
             test_databases.append(db_config)
-        
+
         logger.info(f"✅ Generated {len(test_databases)} test database configurations")
-        
+
         # Generate some test alert thresholds
         test_thresholds = [
             {
@@ -85,27 +84,27 @@ async def generate_test_data():
                 "updated_at": datetime.utcnow().isoformat(),
             }
         ]
-        
+
         for threshold in test_thresholds:
             key = f"alert_threshold:{threshold['id']}"
             await redis_client.set(key, json.dumps(threshold))
-        
+
         logger.info(f"✅ Generated {len(test_thresholds)} test alert thresholds")
-        
+
         # Store summary
         summary = {
             "generated_at": datetime.utcnow().isoformat(),
             "databases": len(test_databases),
             "thresholds": len(test_thresholds),
         }
-        
+
         await redis_client.set("test_data_summary", json.dumps(summary))
-        
+
         logger.info("🎉 Test data generation completed successfully!")
         logger.info(f"📊 Generated: {summary['databases']} databases, {summary['thresholds']} thresholds")
-        
+
         await redis_client.aclose()
-        
+
     except Exception as e:
         logger.error(f"❌ Test data generation failed: {e}")
         raise

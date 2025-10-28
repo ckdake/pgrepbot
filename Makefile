@@ -16,13 +16,9 @@ help:
 	@echo "  make lint        - Run code quality checks"
 	@echo ""
 	@echo "🧪 Testing:"
-	@echo "  make test        - Run comprehensive test suite with coverage"
+	@echo "  make test        - Run all tests with coverage"
 	@echo "  make test-unit   - Run unit tests only (fast)"
 	@echo "  make test-integration - Run integration tests"
-	@echo "  make test-e2e    - Run end-to-end workflow tests"
-	@echo "  make test-performance - Run performance and load tests"
-	@echo "  make test-security - Run security and validation tests"
-	@echo "  make test-data   - Generate comprehensive test data"
 	@echo ""
 	@echo "📦 Production:"
 	@echo "  make build       - Build production Docker image"
@@ -112,13 +108,13 @@ run:
 	export AUTH_KEY=dev-auth-key-12345 && \
 	./venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app
 
-# Run tests locally
+# Run all tests with coverage
 test:
 	@if [ ! -d "venv" ]; then \
 		echo "❌ Virtual environment not found. Run 'make setup' first."; \
 		exit 1; \
 	fi
-	@echo "🧪 Running comprehensive test suite with coverage..."
+	@echo "🧪 Running all tests with coverage..."
 	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
 	export AWS_ACCESS_KEY_ID=test && \
 	export AWS_SECRET_ACCESS_KEY=test && \
@@ -126,7 +122,8 @@ test:
 	export REDIS_HOST=localhost && \
 	export REDIS_PORT=6379 && \
 	export REDIS_URL=redis://localhost:6379 && \
-	./venv/bin/python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=50
+	export AUTH_KEY=dev-auth-key-12345 && \
+	./venv/bin/python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html --cov-fail-under=50
 	@echo ""
 	@echo "📊 Coverage report generated in htmlcov/index.html"
 
@@ -162,69 +159,7 @@ test-integration:
 	export REDIS_URL=redis://localhost:6379 && \
 	./venv/bin/python -m pytest tests/ -m "integration" -v --tb=short
 
-# Run end-to-end tests
-test-e2e:
-	@if [ ! -d "venv" ]; then \
-		echo "❌ Virtual environment not found. Run 'make setup' first."; \
-		exit 1; \
-	fi
-	@echo "🎯 Running end-to-end tests..."
-	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
-	export AWS_ACCESS_KEY_ID=test && \
-	export AWS_SECRET_ACCESS_KEY=test && \
-	export AWS_DEFAULT_REGION=us-east-1 && \
-	export REDIS_HOST=localhost && \
-	export REDIS_PORT=6379 && \
-	export REDIS_URL=redis://localhost:6379 && \
-	./venv/bin/python -m pytest tests/ -m "e2e" -v --tb=short
 
-# Run performance tests
-test-performance:
-	@if [ ! -d "venv" ]; then \
-		echo "❌ Virtual environment not found. Run 'make setup' first."; \
-		exit 1; \
-	fi
-	@echo "🚀 Running performance tests..."
-	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
-	export AWS_ACCESS_KEY_ID=test && \
-	export AWS_SECRET_ACCESS_KEY=test && \
-	export AWS_DEFAULT_REGION=us-east-1 && \
-	export REDIS_HOST=localhost && \
-	export REDIS_PORT=6379 && \
-	export REDIS_URL=redis://localhost:6379 && \
-	./venv/bin/python -m pytest tests/ -m "performance" -v --tb=short
-
-# Run security tests
-test-security:
-	@if [ ! -d "venv" ]; then \
-		echo "❌ Virtual environment not found. Run 'make setup' first."; \
-		exit 1; \
-	fi
-	@echo "🔒 Running security tests..."
-	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
-	export AWS_ACCESS_KEY_ID=test && \
-	export AWS_SECRET_ACCESS_KEY=test && \
-	export AWS_DEFAULT_REGION=us-east-1 && \
-	export REDIS_HOST=localhost && \
-	export REDIS_PORT=6379 && \
-	export REDIS_URL=redis://localhost:6379 && \
-	./venv/bin/python -m pytest tests/ -m "security" -v --tb=short
-
-# Generate test data for comprehensive testing
-test-data:
-	@if [ ! -d "venv" ]; then \
-		echo "❌ Virtual environment not found. Run 'make setup' first."; \
-		exit 1; \
-	fi
-	@echo "📊 Generating comprehensive test data..."
-	@export AWS_ENDPOINT_URL=http://localhost:4566 && \
-	export AWS_ACCESS_KEY_ID=test && \
-	export AWS_SECRET_ACCESS_KEY=test && \
-	export AWS_DEFAULT_REGION=us-east-1 && \
-	export REDIS_HOST=localhost && \
-	export REDIS_PORT=6379 && \
-	export REDIS_URL=redis://localhost:6379 && \
-	./venv/bin/python scripts/generate_test_data.py
 
 
 
