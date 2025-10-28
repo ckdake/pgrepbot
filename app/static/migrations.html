@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Migration Management - PostgreSQL Replication Manager</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .section {
+            margin-bottom: 40px;
+        }
+        .section h2 {
+            color: #34495e;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 200px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            resize: vertical;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button.danger {
+            background-color: #e74c3c;
+        }
+        button.danger:hover {
+            background-color: #c0392b;
+        }
+        button.success {
+            background-color: #27ae60;
+        }
+        button.success:hover {
+            background-color: #229954;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .database-card {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            background: #f9f9f9;
+        }
+        .database-card h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .migration-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            background: white;
+        }
+        .migration-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .migration-item:last-child {
+            border-bottom: none;
+        }
+        .pending-migration {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+        .pending-migration h4 {
+            margin: 0 0 10px 0;
+            color: #856404;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-running {
+            background: #cce5ff;
+            color: #004085;
+        }
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .alert {
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 Migration Management</h1>
+
+        <div id="alerts"></div>
+
+        <!-- Create Migration Section -->
+        <div class="section">
+            <h2>Create New Migration</h2>
+            <form id="createMigrationForm">
+                <div class="form-group">
+                    <label for="filename">Migration Filename:</label>
+                    <input type="text" id="filename" name="filename" placeholder="e.g., add_user_table.sql" required>
+                    <small>Filename should end with .sql and contain only alphanumeric characters, underscores, and hyphens.</small>
+                </div>
+                <div class="form-group">
+                    <label for="content">SQL Content:</label>
+                    <textarea id="content" name="content" placeholder="-- Your SQL migration content here
+CREATE TABLE example (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);" required></textarea>
+                </div>
+                <button type="button" onclick="validateMigration()">Validate</button>
+                <button type="submit" class="success">Create Migration</button>
+            </form>
+        </div>
+
+        <!-- Pending Migrations Section -->
+        <div class="section">
+            <h2>Pending Migrations</h2>
+            <button onclick="refreshStatus()">Refresh Status</button>
+            <button onclick="setupTables()" class="success">Setup Migration Tables</button>
+            <div id="pendingMigrations">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading pending migrations...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Database Status Section -->
+        <div class="section">
+            <h2>Database Migration Status</h2>
+            <div id="databaseStatus" class="status-grid">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading database status...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let authToken = localStorage.getItem('auth_token');
+
+        // Check authentication
+        if (!authToken) {
+            window.location.href = '/login.html';
+        }
+
+        // API helper function
+        async function apiCall(endpoint, options = {}) {
+            const defaultOptions = {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                }
+            };
+
+            const response = await fetch(endpoint, { ...defaultOptions, ...options });
+            
+            if (response.status === 401) {
+                localStorage.removeItem('auth_token');
+                window.location.href = '/login.html';
+                return;
+            }
+
+            return response;
+        }
+
+        // Show alert
+        function showAlert(message, type = 'success') {
+            const alertsDiv = document.getElementById('alerts');
+            const alertClass = type === 'success' ? 'alert-success' : 'alert-error';
+            
+            alertsDiv.innerHTML = `
+                <div class="alert ${alertClass}">
+                    ${message}
+                </div>
+            `;
+
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                alertsDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        // Validate migration
+        async function validateMigration() {
+            const filename = document.getElementById('filename').value;
+            const content = document.getElementById('content').value;
+
+            if (!filename || !content) {
+                showAlert('Please fill in both filename and content', 'error');
+                return;
+            }
+
+            try {
+                const response = await apiCall('/api/migrations/validate', {
+                    method: 'POST',
+                    body: JSON.stringify({ filename, content })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const validation = result.validation_results;
+                    let message = `Validation completed: ${validation.statement_count} statements found.`;
+                    
+                    if (validation.warnings.length > 0) {
+                        message += `\n\nWarnings:\n${validation.warnings.join('\n')}`;
+                    }
+                    
+                    if (validation.errors.length > 0) {
+                        message += `\n\nErrors:\n${validation.errors.join('\n')}`;
+                        showAlert(message, 'error');
+                    } else {
+                        showAlert(message, 'success');
+                    }
+                } else {
+                    showAlert('Validation failed', 'error');
+                }
+            } catch (error) {
+                showAlert(`Validation error: ${error.message}`, 'error');
+            }
+        }
+
+        // Create migration
+        document.getElementById('createMigrationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const filename = document.getElementById('filename').value;
+            const content = document.getElementById('content').value;
+
+            try {
+                const response = await apiCall('/api/migrations/create', {
+                    method: 'POST',
+                    body: JSON.stringify({ filename, content })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(`Migration created successfully: ${result.migration_id}`, 'success');
+                    document.getElementById('createMigrationForm').reset();
+                    refreshStatus();
+                } else {
+                    showAlert('Failed to create migration', 'error');
+                }
+            } catch (error) {
+                showAlert(`Error creating migration: ${error.message}`, 'error');
+            }
+        });
+
+        // Execute migration
+        async function executeMigration(migrationId) {
+            if (!confirm(`Are you sure you want to execute migration ${migrationId}?`)) {
+                return;
+            }
+
+            try {
+                const response = await apiCall('/api/migrations/execute', {
+                    method: 'POST',
+                    body: JSON.stringify({ migration_id: migrationId })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(`Migration executed successfully`, 'success');
+                } else {
+                    showAlert(`Migration execution failed`, 'error');
+                }
+
+                refreshStatus();
+            } catch (error) {
+                showAlert(`Error executing migration: ${error.message}`, 'error');
+            }
+        }
+
+        // Retry migration
+        async function retryMigration(migrationId) {
+            if (!confirm(`Are you sure you want to retry migration ${migrationId}?`)) {
+                return;
+            }
+
+            try {
+                const response = await apiCall(`/api/migrations/retry/${migrationId}`, {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(`Migration retried successfully`, 'success');
+                } else {
+                    showAlert(`Migration retry failed`, 'error');
+                }
+
+                refreshStatus();
+            } catch (error) {
+                showAlert(`Error retrying migration: ${error.message}`, 'error');
+            }
+        }
+
+        // Setup migration tables
+        async function setupTables() {
+            if (!confirm('This will create migration tracking tables in all databases. Continue?')) {
+                return;
+            }
+
+            try {
+                const response = await apiCall('/api/migrations/setup-tables', {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(`Migration tables setup completed: ${result.total_databases} databases`, 'success');
+                } else {
+                    showAlert(`Migration tables setup failed`, 'error');
+                }
+
+                refreshStatus();
+            } catch (error) {
+                showAlert(`Error setting up tables: ${error.message}`, 'error');
+            }
+        }
+
+        // Refresh status
+        async function refreshStatus() {
+            try {
+                const response = await apiCall('/api/migrations/status');
+                const status = await response.json();
+
+                if (status.success) {
+                    updatePendingMigrations(status.pending_migrations);
+                    updateDatabaseStatus(status.databases);
+                } else {
+                    showAlert('Failed to load migration status', 'error');
+                }
+            } catch (error) {
+                showAlert(`Error loading status: ${error.message}`, 'error');
+            }
+        }
+
+        // Update pending migrations display
+        function updatePendingMigrations(pendingMigrations) {
+            const container = document.getElementById('pendingMigrations');
+            
+            if (pendingMigrations.length === 0) {
+                container.innerHTML = '<p>No pending migrations</p>';
+                return;
+            }
+
+            container.innerHTML = pendingMigrations.map(migration => `
+                <div class="pending-migration">
+                    <h4>${migration.filename}</h4>
+                    <p><strong>ID:</strong> ${migration.migration_id}</p>
+                    <p><strong>Created:</strong> ${new Date(migration.created_at).toLocaleString()}</p>
+                    <p><strong>Created by:</strong> ${migration.created_by}</p>
+                    <p><strong>Status:</strong> <span class="status-badge status-${migration.status}">${migration.status}</span></p>
+                    <p><strong>Retry count:</strong> ${migration.retry_count}</p>
+                    <button onclick="executeMigration('${migration.migration_id}')" class="success">Execute</button>
+                    ${migration.status === 'failed' ? `<button onclick="retryMigration('${migration.migration_id}')">Retry</button>` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Update database status display
+        function updateDatabaseStatus(databases) {
+            const container = document.getElementById('databaseStatus');
+            
+            if (Object.keys(databases).length === 0) {
+                container.innerHTML = '<p>No databases configured</p>';
+                return;
+            }
+
+            container.innerHTML = Object.entries(databases).map(([dbId, db]) => `
+                <div class="database-card">
+                    <h3>${db.name || dbId}</h3>
+                    ${db.error ? `
+                        <p style="color: #e74c3c;"><strong>Error:</strong> ${db.error}</p>
+                    ` : `
+                        <p><strong>Migration Table:</strong> ${db.migration_table}</p>
+                        <p><strong>Applied Migrations:</strong> ${db.total_applied}</p>
+                        <div class="migration-list">
+                            ${db.applied_migrations.length === 0 ? 
+                                '<p>No migrations applied</p>' :
+                                db.applied_migrations.map(migration => `
+                                    <div class="migration-item">
+                                        <strong>${migration.id}</strong><br>
+                                        Applied: ${new Date(migration.applied_at).toLocaleString()}<br>
+                                        By: ${migration.created_by}
+                                    </div>
+                                `).join('')
+                            }
+                        </div>
+                    `}
+                </div>
+            `).join('');
+        }
+
+        // Load initial status
+        refreshStatus();
+    </script>
+</body>
+</html>

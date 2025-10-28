@@ -7,28 +7,40 @@ Provides endpoints for executing schema migrations across database topologies.
 import logging
 from datetime import datetime
 from typing import Any
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel
 
-from app.dependencies import get_redis_client
+from app.dependencies import get_connection_manager, get_redis_client, get_replication_discovery_service
 from app.middleware.auth import get_current_user
 from app.models.auth import User
+from app.services.migration_executor import MigrationExecutor
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/migrations", tags=["Schema Migrations"])
 
 
+class MigrationCreateRequest(BaseModel):
+    """Request model for creating a new migration"""
+
+    filename: str
+    content: str
+
+
 class MigrationExecutionRequest(BaseModel):
     """Request model for executing a migration"""
 
-    sql_script: str
-    target_databases: list[str] | None = None  # If None, applies to all databases
-    dry_run: bool = False
-    rollback_on_error: bool = True
-    execution_order: str = "sequential"  # "sequential" or "parallel"
+    migration_id: str
+
+
+class MigrationStatusResponse(BaseModel):
+    """Response model for migration status"""
+
+    success: bool
+    databases: dict[str, Any]
+    pending_migrations: list[dict[str, Any]]
+    missing_migrations: dict[str, list[str]]
 
 
 class MigrationResult(BaseModel):
@@ -105,149 +117,70 @@ class MigrationConnectionManager:
 migration_manager = MigrationConnectionManager()
 
 
-@router.post("/execute", response_model=MigrationExecutionResponse)
-async def execute_migration(
-    request: MigrationExecutionRequest,
+@router.post("/create", response_model=dict[str, Any])
+async def create_migration(
+    request: MigrationCreateRequest,
     user: User = Depends(get_current_user),
+    connection_manager=Depends(get_connection_manager),
+    discovery_service=Depends(get_replication_discovery_service),
     redis_client=Depends(get_redis_client),
 ):
     """
-    Execute a schema migration across specified databases.
+    Create a new migration and store it for execution.
 
     Requires authentication.
     """
     try:
-        execution_id = str(uuid4())
-        start_time = datetime.utcnow()
+        executor = MigrationExecutor(connection_manager, discovery_service, redis_client)
 
-        logger.info(f"User {user.username} executing migration {execution_id}")
-
-        # Validate SQL script
-        if not request.sql_script.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="SQL script cannot be empty",
-            )
-
-        # Get target databases
-        target_databases = await _get_target_databases(request.target_databases, redis_client)
-
-        if not target_databases:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No target databases found",
-            )
-
-        # Send initial progress
-        await migration_manager.send_progress(
-            {
-                "execution_id": execution_id,
-                "status": "started",
-                "message": f"Starting migration execution on {len(target_databases)} databases",
-                "progress": 0,
-            }
+        migration_id = await executor.store_migration(
+            filename=request.filename,
+            content=request.content,
+            created_by=user.username,
         )
 
-        # Execute migration
-        results = []
-        successful_count = 0
-        failed_count = 0
-        rollback_performed = False
+        return {
+            "success": True,
+            "message": "Migration created successfully",
+            "migration_id": migration_id,
+        }
 
-        for i, db_config in enumerate(target_databases):
-            try:
-                # Send progress update
-                progress = int((i / len(target_databases)) * 100)
-                await migration_manager.send_progress(
-                    {
-                        "execution_id": execution_id,
-                        "status": "executing",
-                        "message": f"Executing on {db_config['name']}",
-                        "progress": progress,
-                        "current_database": db_config["name"],
-                    }
-                )
+    except Exception as e:
+        logger.error(f"Failed to create migration: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create migration: {str(e)}",
+        ) from e
 
-                # Execute migration on this database
-                result = await _execute_migration_on_database(db_config, request.sql_script, request.dry_run)
-                results.append(result)
 
-                if result.success:
-                    successful_count += 1
-                else:
-                    failed_count += 1
+@router.post("/execute", response_model=dict[str, Any])
+async def execute_migration(
+    request: MigrationExecutionRequest,
+    user: User = Depends(get_current_user),
+    connection_manager=Depends(get_connection_manager),
+    discovery_service=Depends(get_replication_discovery_service),
+    redis_client=Depends(get_redis_client),
+):
+    """
+    Execute a migration across the replication topology.
 
-                    # If rollback on error is enabled and this is not a dry run
-                    if request.rollback_on_error and not request.dry_run and failed_count > 0:
-                        logger.warning(f"Migration failed on {db_config['name']}, performing rollback")
-                        await migration_manager.send_progress(
-                            {
-                                "execution_id": execution_id,
-                                "status": "rollback",
-                                "message": "Migration failed, performing rollback",
-                                "progress": progress,
-                            }
-                        )
+    Requires authentication.
+    """
+    try:
+        executor = MigrationExecutor(connection_manager, discovery_service, redis_client)
 
-                        # Perform rollback on successful databases
-                        await _perform_rollback(results, successful_count)
-                        rollback_performed = True
-                        break
+        logger.info(f"User {user.username} executing migration {request.migration_id}")
 
-            except Exception as e:
-                logger.error(f"Error executing migration on {db_config['name']}: {e}")
-                result = MigrationResult(
-                    database_id=db_config["id"],
-                    database_name=db_config["name"],
-                    success=False,
-                    execution_time_ms=0,
-                    error_message=str(e),
-                )
-                results.append(result)
-                failed_count += 1
+        result = await executor.execute_migration(request.migration_id)
 
-        end_time = datetime.utcnow()
-        execution_time_ms = (end_time - start_time).total_seconds() * 1000
+        return {
+            "success": result["success"],
+            "message": f"Migration execution {'completed' if result['success'] else 'failed'}",
+            "migration_id": result["migration_id"],
+            "results": result["results"],
+            "retry_count": result["retry_count"],
+        }
 
-        # Determine overall success
-        overall_success = failed_count == 0 and not rollback_performed
-
-        # Send final progress
-        await migration_manager.send_progress(
-            {
-                "execution_id": execution_id,
-                "status": "completed" if overall_success else "failed",
-                "message": f"Migration completed: {successful_count} successful, {failed_count} failed",
-                "progress": 100,
-            }
-        )
-
-        # Store migration history
-        await _store_migration_history(
-            execution_id,
-            user.username,
-            request,
-            results,
-            successful_count,
-            failed_count,
-            execution_time_ms,
-            redis_client,
-        )
-
-        return MigrationExecutionResponse(
-            execution_id=execution_id,
-            success=overall_success,
-            message=f"Migration executed on {len(target_databases)} databases",
-            total_databases=len(target_databases),
-            successful_databases=successful_count,
-            failed_databases=failed_count,
-            execution_time_ms=execution_time_ms,
-            results=results,
-            rollback_performed=rollback_performed,
-        )
-
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Failed to execute migration: {e}")
         raise HTTPException(
@@ -256,9 +189,118 @@ async def execute_migration(
         ) from e
 
 
+@router.get("/status", response_model=MigrationStatusResponse)
+async def get_migration_status(
+    user: User = Depends(get_current_user),
+    connection_manager=Depends(get_connection_manager),
+    discovery_service=Depends(get_replication_discovery_service),
+    redis_client=Depends(get_redis_client),
+):
+    """
+    Get migration status across all databases.
+
+    Requires authentication.
+    """
+    try:
+        executor = MigrationExecutor(connection_manager, discovery_service, redis_client)
+
+        # Get all configured databases
+        databases = await executor._get_configured_databases()
+
+        status = await executor.get_migration_status(databases)
+
+        return MigrationStatusResponse(
+            success=True,
+            databases=status["databases"],
+            pending_migrations=status["pending_migrations"],
+            missing_migrations=status["missing_migrations"],
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get migration status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get migration status: {str(e)}",
+        ) from e
+
+
+@router.post("/retry/{migration_id}", response_model=dict[str, Any])
+async def retry_migration(
+    migration_id: str,
+    user: User = Depends(get_current_user),
+    connection_manager=Depends(get_connection_manager),
+    discovery_service=Depends(get_replication_discovery_service),
+    redis_client=Depends(get_redis_client),
+):
+    """
+    Retry a failed migration.
+
+    Requires authentication.
+    """
+    try:
+        executor = MigrationExecutor(connection_manager, discovery_service, redis_client)
+
+        logger.info(f"User {user.username} retrying migration {migration_id}")
+
+        result = await executor.retry_failed_migration(migration_id)
+
+        return {
+            "success": result["success"],
+            "message": f"Migration retry {'completed' if result['success'] else 'failed'}",
+            "migration_id": result["migration_id"],
+            "results": result["results"],
+            "retry_count": result["retry_count"],
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to retry migration: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retry migration: {str(e)}",
+        ) from e
+
+
+@router.post("/setup-tables", response_model=dict[str, Any])
+async def setup_migration_tables(
+    user: User = Depends(get_current_user),
+    connection_manager=Depends(get_connection_manager),
+    discovery_service=Depends(get_replication_discovery_service),
+    redis_client=Depends(get_redis_client),
+):
+    """
+    Set up migration tracking tables in all databases.
+
+    Requires authentication.
+    """
+    try:
+        executor = MigrationExecutor(connection_manager, discovery_service, redis_client)
+
+        # Get all configured databases
+        databases = await executor._get_configured_databases()
+
+        results = await executor.create_migration_tables(databases)
+
+        successful_count = sum(1 for success in results.values() if success)
+        failed_count = len(results) - successful_count
+
+        return {
+            "success": failed_count == 0,
+            "message": f"Migration tables setup: {successful_count} successful, {failed_count} failed",
+            "results": results,
+            "total_databases": len(results),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to setup migration tables: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to setup migration tables: {str(e)}",
+        ) from e
+
+
 @router.post("/validate", response_model=dict[str, Any])
 async def validate_migration(
-    request: MigrationExecutionRequest,
+    request: MigrationCreateRequest,
     user: User = Depends(get_current_user),
     redis_client=Depends(get_redis_client),
 ):
@@ -279,8 +321,18 @@ async def validate_migration(
             "estimated_execution_time": "< 1 second",
         }
 
+        # Validate filename format
+        if not request.filename.endswith(".sql"):
+            validation_results["errors"].append("Filename must end with .sql")
+            validation_results["valid"] = False
+
+        if not request.filename.replace(".sql", "").replace("_", "").replace("-", "").isalnum():
+            validation_results["warnings"].append(
+                "Filename should contain only alphanumeric characters, underscores, and hyphens"
+            )
+
         # Parse SQL statements
-        statements = _parse_sql_statements(request.sql_script)
+        statements = _parse_sql_statements(request.content)
         validation_results["statement_count"] = len(statements)
 
         # Basic validation checks
@@ -294,10 +346,6 @@ async def validate_migration(
             # Check for missing WHERE clauses in UPDATE/DELETE
             if statement.startswith(("UPDATE", "DELETE")) and "WHERE" not in statement:
                 validation_results["warnings"].append(f"Statement {i + 1}: UPDATE/DELETE without WHERE clause")
-
-        # Get target databases for validation
-        target_databases = await _get_target_databases(request.target_databases, redis_client)
-        validation_results["target_databases"] = len(target_databases)
 
         return {
             "success": True,

@@ -10,12 +10,14 @@ from fastapi import HTTPException, status
 from app.services.aws_rds import RDSClient
 from app.services.aws_secrets import SecretsManagerClient
 from app.services.postgres_connection import PostgreSQLConnectionManager
+from app.services.replication_discovery import ReplicationDiscoveryService
 
 # Global clients
 _redis_client: redis.Redis | None = None
 _connection_manager: PostgreSQLConnectionManager | None = None
 _rds_client: RDSClient | None = None
 _secrets_client: SecretsManagerClient | None = None
+_replication_discovery_service: ReplicationDiscoveryService | None = None
 
 
 async def get_redis_client() -> redis.Redis:
@@ -74,6 +76,25 @@ async def get_secrets_client() -> SecretsManagerClient:
         _secrets_client = SecretsManagerClient()
 
     return _secrets_client
+
+
+async def get_replication_discovery_service() -> ReplicationDiscoveryService:
+    """Get Replication Discovery Service dependency"""
+    global _replication_discovery_service, _connection_manager, _rds_client
+
+    if _replication_discovery_service is None:
+        # Ensure connection manager and RDS client are initialized
+        if _connection_manager is None:
+            _connection_manager = await get_connection_manager()
+        if _rds_client is None:
+            _rds_client = await get_rds_client()
+
+        _replication_discovery_service = ReplicationDiscoveryService(
+            connection_manager=_connection_manager,
+            rds_client=_rds_client,
+        )
+
+    return _replication_discovery_service
 
 
 async def close_redis_client():

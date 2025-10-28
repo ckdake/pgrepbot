@@ -404,12 +404,13 @@ class ReplicationManager {
 
     async loadMigrations() {
         const content = `
-            <h1 class="page-title">Schema Migrations</h1>
+            <h1 class="page-title">🔄 Schema Migrations</h1>
             
+            <!-- Create Migration Section -->
             <div class="card">
                 <div class="card-header">
                     <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                        <span>Migration Execution</span>
+                        <span>Create New Migration</span>
                         <div>
                             <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.loadSampleMigration()">
                                 Load Sample
@@ -423,70 +424,74 @@ class ReplicationManager {
                 <div class="card-body">
                     <div class="row">
                         <div class="col-6">
-                            <h5>SQL Editor</h5>
-                            <textarea id="migration-sql" class="form-control" rows="15" placeholder="-- Enter your SQL migration script here
--- Example:
--- CREATE TABLE users (
---     id SERIAL PRIMARY KEY,
---     username VARCHAR(50) UNIQUE NOT NULL,
---     email VARCHAR(100) UNIQUE NOT NULL,
---     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
--- );"></textarea>
+                            <div class="form-group">
+                                <label for="migration-filename">Migration Filename:</label>
+                                <input type="text" id="migration-filename" class="form-control" placeholder="e.g., add_user_table.sql">
+                                <small class="form-text text-muted">Filename should end with .sql and contain only alphanumeric characters, underscores, and hyphens.</small>
+                            </div>
                             
-                            <div class="mt-2">
-                                <div class="form-group">
-                                    <label>
-                                        <input type="checkbox" id="dry-run-checkbox" checked> Dry Run (validate only)
-                                    </label>
-                                </div>
-                                <div class="form-group">
-                                    <label>
-                                        <input type="checkbox" id="rollback-checkbox" checked> Rollback on error
-                                    </label>
-                                </div>
+                            <div class="form-group">
+                                <label for="migration-sql">SQL Content:</label>
+                                <textarea id="migration-sql" class="form-control" rows="12" placeholder="-- Your SQL migration content here
+CREATE TABLE example (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);"></textarea>
                             </div>
                             
                             <div class="mt-2">
-                                <button class="btn btn-success" onclick="replicationManager.executeMigration()" id="execute-btn">
-                                    <span id="execute-icon">▶️</span> Execute Migration
-                                </button>
                                 <button class="btn btn-secondary" onclick="replicationManager.validateMigration()">
-                                    ✓ Validate Only
+                                    ✓ Validate
+                                </button>
+                                <button class="btn btn-success" onclick="replicationManager.createMigration()">
+                                    💾 Create Migration
                                 </button>
                             </div>
                         </div>
                         <div class="col-6">
-                            <h5>Execution Results</h5>
-                            <div id="migration-results" class="border p-3" style="height: 400px; overflow-y: auto; background: #f8f9fa; font-family: monospace; font-size: 0.875rem;">
-                                <div class="text-muted">Migration results will appear here...</div>
-                            </div>
-                            
-                            <div class="mt-2">
-                                <div id="migration-progress" class="progress" style="display: none;">
-                                    <div class="progress-bar" role="progressbar" style="width: 0%"></div>
-                                </div>
-                                <div id="migration-status" class="mt-2"></div>
+                            <h5>Validation Results</h5>
+                            <div id="migration-validation" class="border p-3" style="height: 300px; overflow-y: auto; background: #f8f9fa; font-family: monospace; font-size: 0.875rem;">
+                                <div class="text-muted">Validation results will appear here...</div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
+            <!-- Pending Migrations Section -->
             <div class="card">
-                <div class="card-header">Migration History</div>
+                <div class="card-header">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <span>Pending Migrations</span>
+                        <div>
+                            <button class="btn btn-outline-primary btn-sm" onclick="replicationManager.refreshMigrationStatus()">
+                                🔄 Refresh
+                            </button>
+                            <button class="btn btn-success btn-sm" onclick="replicationManager.setupMigrationTables()">
+                                🔧 Setup Tables
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <div class="card-body">
-                    <div id="migration-history">Loading migration history...</div>
+                    <div id="pending-migrations">Loading pending migrations...</div>
+                </div>
+            </div>
+
+            <!-- Database Status Section -->
+            <div class="card">
+                <div class="card-header">Database Migration Status</div>
+                <div class="card-body">
+                    <div id="database-migration-status" class="row">Loading database status...</div>
                 </div>
             </div>
         `;
 
         document.getElementById('main-content').innerHTML = content;
 
-        // Load migration history
-        await this.loadMigrationHistory();
-
-        // Setup WebSocket for real-time progress if available
-        this.setupMigrationWebSocket();
+        // Load migration status
+        await this.refreshMigrationStatus();
     }
 
     // API Methods
@@ -937,41 +942,37 @@ VALUES
 ON CONFLICT (username) DO NOTHING;`;
 
         document.getElementById('migration-sql').value = sampleSQL;
+        document.getElementById('migration-filename').value = 'create_users_table.sql';
     }
 
     clearMigrationEditor() {
         document.getElementById('migration-sql').value = '';
-        document.getElementById('migration-results').innerHTML = '<div class="text-muted">Migration results will appear here...</div>';
-        this.hideMigrationProgress();
+        document.getElementById('migration-filename').value = '';
+        document.getElementById('migration-validation').innerHTML = '<div class="text-muted">Validation results will appear here...</div>';
     }
 
     async validateMigration() {
-        const sqlScript = document.getElementById('migration-sql').value.trim();
+        const filename = document.getElementById('migration-filename').value.trim();
+        const content = document.getElementById('migration-sql').value.trim();
 
-        if (!sqlScript) {
-            alert('Please enter a SQL script to validate');
+        if (!filename || !content) {
+            alert('Please enter both filename and SQL content');
             return;
         }
 
         try {
-            const response = await fetch('/api/migrations/validate', {
+            const result = await this.apiCall('/api/migrations/validate', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    sql_script: sqlScript,
-                    dry_run: true
-                })
+                body: JSON.stringify({ filename, content })
             });
-
-            const result = await response.json();
 
             if (result.success) {
                 const validation = result.validation_results;
-                let output = `<div class="status healthy">✓ Validation Successful</div><br>`;
+                let output = `<div class="status ${validation.valid ? 'healthy' : 'error'}">
+                    ${validation.valid ? '✓' : '❌'} Validation ${validation.valid ? 'Successful' : 'Failed'}
+                </div><br>`;
+                
                 output += `<strong>Statement Count:</strong> ${validation.statement_count}<br>`;
-                output += `<strong>Target Databases:</strong> ${validation.target_databases}<br>`;
                 output += `<strong>Estimated Time:</strong> ${validation.estimated_execution_time}<br><br>`;
 
                 if (validation.warnings.length > 0) {
@@ -979,6 +980,7 @@ ON CONFLICT (username) DO NOTHING;`;
                     validation.warnings.forEach(warning => {
                         output += `<div class="text-warning">• ${warning}</div>`;
                     });
+                    output += '<br>';
                 }
 
                 if (validation.errors.length > 0) {
@@ -988,16 +990,16 @@ ON CONFLICT (username) DO NOTHING;`;
                     });
                 }
 
-                document.getElementById('migration-results').innerHTML = output;
+                document.getElementById('migration-validation').innerHTML = output;
             } else {
-                document.getElementById('migration-results').innerHTML = `
+                document.getElementById('migration-validation').innerHTML = `
                     <div class="status error">❌ Validation Failed</div><br>
                     ${result.message}
                 `;
             }
 
         } catch (error) {
-            document.getElementById('migration-results').innerHTML = `
+            document.getElementById('migration-validation').innerHTML = `
                 <div class="status error">❌ Validation Error</div><br>
                 ${error.message}
             `;
@@ -1134,6 +1136,205 @@ ON CONFLICT (username) DO NOTHING;`;
     setupMigrationWebSocket() {
         // WebSocket setup for real-time migration progress
         // This would be implemented when we have an active migration execution
+    }
+
+    // New Migration Methods for the Enhanced API
+
+    async createMigration() {
+        const filename = document.getElementById('migration-filename').value.trim();
+        const content = document.getElementById('migration-sql').value.trim();
+
+        if (!filename || !content) {
+            alert('Please enter both filename and SQL content');
+            return;
+        }
+
+        try {
+            const result = await this.apiCall('/api/migrations/create', {
+                method: 'POST',
+                body: JSON.stringify({ filename, content })
+            });
+
+            if (result.success) {
+                alert(`Migration created successfully: ${result.migration_id}`);
+                this.clearMigrationEditor();
+                await this.refreshMigrationStatus();
+            } else {
+                alert('Failed to create migration');
+            }
+
+        } catch (error) {
+            alert(`Error creating migration: ${error.message}`);
+        }
+    }
+
+    async refreshMigrationStatus() {
+        try {
+            const status = await this.apiCall('/api/migrations/status');
+
+            if (status.success) {
+                this.updatePendingMigrations(status.pending_migrations);
+                this.updateDatabaseMigrationStatus(status.databases);
+            } else {
+                console.error('Failed to load migration status');
+            }
+
+        } catch (error) {
+            console.error(`Error loading migration status: ${error.message}`);
+        }
+    }
+
+    updatePendingMigrations(pendingMigrations) {
+        const container = document.getElementById('pending-migrations');
+        
+        if (pendingMigrations.length === 0) {
+            container.innerHTML = '<p class="text-muted">No pending migrations</p>';
+            return;
+        }
+
+        container.innerHTML = pendingMigrations.map(migration => `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">${migration.filename}</h5>
+                    <p class="card-text">
+                        <strong>ID:</strong> ${migration.migration_id}<br>
+                        <strong>Created:</strong> ${new Date(migration.created_at).toLocaleString()}<br>
+                        <strong>Created by:</strong> ${migration.created_by}<br>
+                        <strong>Status:</strong> <span class="badge badge-${this.getStatusBadgeClass(migration.status)}">${migration.status}</span><br>
+                        <strong>Retry count:</strong> ${migration.retry_count}
+                    </p>
+                    <button class="btn btn-success btn-sm" onclick="replicationManager.executeMigrationById('${migration.migration_id}')">
+                        ▶️ Execute
+                    </button>
+                    ${migration.status === 'failed' ? 
+                        `<button class="btn btn-warning btn-sm" onclick="replicationManager.retryMigration('${migration.migration_id}')">
+                            🔄 Retry
+                        </button>` : ''
+                    }
+                </div>
+            </div>
+        `).join('');
+    }
+
+    updateDatabaseMigrationStatus(databases) {
+        const container = document.getElementById('database-migration-status');
+        
+        if (Object.keys(databases).length === 0) {
+            container.innerHTML = '<p class="text-muted">No databases configured</p>';
+            return;
+        }
+
+        container.innerHTML = Object.entries(databases).map(([dbId, db]) => `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">${db.name || dbId}</h6>
+                    </div>
+                    <div class="card-body">
+                        ${db.error ? `
+                            <p class="text-danger"><strong>Error:</strong> ${db.error}</p>
+                        ` : `
+                            <p><strong>Migration Table:</strong> ${db.migration_table}</p>
+                            <p><strong>Applied Migrations:</strong> ${db.total_applied}</p>
+                            <div style="max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 0.25rem; padding: 0.5rem; background: #f8f9fa;">
+                                ${db.applied_migrations.length === 0 ? 
+                                    '<p class="text-muted mb-0">No migrations applied</p>' :
+                                    db.applied_migrations.map(migration => `
+                                        <div class="mb-2 pb-2 border-bottom" style="font-size: 0.875rem;">
+                                            <strong>${migration.id}</strong><br>
+                                            <small class="text-muted">
+                                                Applied: ${new Date(migration.applied_at).toLocaleString()}<br>
+                                                By: ${migration.created_by}
+                                            </small>
+                                        </div>
+                                    `).join('')
+                                }
+                            </div>
+                        `}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    async executeMigrationById(migrationId) {
+        if (!confirm(`Are you sure you want to execute migration ${migrationId}?`)) {
+            return;
+        }
+
+        try {
+            const result = await this.apiCall('/api/migrations/execute', {
+                method: 'POST',
+                body: JSON.stringify({ migration_id: migrationId })
+            });
+
+            if (result.success) {
+                alert('Migration executed successfully');
+            } else {
+                alert('Migration execution failed');
+            }
+
+            await this.refreshMigrationStatus();
+
+        } catch (error) {
+            alert(`Error executing migration: ${error.message}`);
+        }
+    }
+
+    async retryMigration(migrationId) {
+        if (!confirm(`Are you sure you want to retry migration ${migrationId}?`)) {
+            return;
+        }
+
+        try {
+            const result = await this.apiCall(`/api/migrations/retry/${migrationId}`, {
+                method: 'POST'
+            });
+
+            if (result.success) {
+                alert('Migration retried successfully');
+            } else {
+                alert('Migration retry failed');
+            }
+
+            await this.refreshMigrationStatus();
+
+        } catch (error) {
+            alert(`Error retrying migration: ${error.message}`);
+        }
+    }
+
+    async setupMigrationTables() {
+        if (!confirm('This will create migration tracking tables in all databases. Continue?')) {
+            return;
+        }
+
+        try {
+            const result = await this.apiCall('/api/migrations/setup-tables', {
+                method: 'POST'
+            });
+
+            if (result.success) {
+                alert(`Migration tables setup completed: ${result.total_databases} databases`);
+            } else {
+                alert('Migration tables setup failed');
+            }
+
+            await this.refreshMigrationStatus();
+
+        } catch (error) {
+            alert(`Error setting up tables: ${error.message}`);
+        }
+    }
+
+    getStatusBadgeClass(status) {
+        switch (status) {
+            case 'pending': return 'warning';
+            case 'running': return 'primary';
+            case 'completed': return 'success';
+            case 'failed': return 'danger';
+            default: return 'secondary';
+        }
     }
 
     setupAutoRefresh() {
