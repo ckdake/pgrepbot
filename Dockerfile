@@ -22,7 +22,7 @@ COPY pyproject.toml /app/
 WORKDIR /app
 
 # Install dependencies
-RUN pip install --upgrade pip && \
+RUN pip install --upgrade pip==24.3.1 && \
     pip install -e .
 
 # Production stage

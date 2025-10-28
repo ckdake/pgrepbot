@@ -123,7 +123,7 @@ test:
 	export REDIS_PORT=6379 && \
 	export REDIS_URL=redis://localhost:6379 && \
 	export AUTH_KEY=dev-auth-key-12345 && \
-	./venv/bin/python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html --cov-fail-under=50
+	./venv/bin/python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html --cov-fail-under=60
 	@echo ""
 	@echo "📊 Coverage report generated in htmlcov/index.html"
 
