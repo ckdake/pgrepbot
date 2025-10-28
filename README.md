@@ -1,6 +1,9 @@
 # PostgreSQL Replication Manager
 
-[![CI](https://github.com/ckdake/pgrepbot/workflows/CI/badge.svg)](https://github.com/ckdake/pgrepbot/actions)
+[![Test](https://github.com/ckdake/pgrepbot/workflows/Test/badge.svg)](https://github.com/ckdake/pgrepbot/actions/workflows/test.yml)
+[![Build](https://github.com/ckdake/pgrepbot/workflows/Build/badge.svg)](https://github.com/ckdake/pgrepbot/actions/workflows/build.yml)
+[![Lint](https://github.com/ckdake/pgrepbot/workflows/Lint/badge.svg)](https://github.com/ckdake/pgrepbot/actions/workflows/lint.yml)
+[![Security Scan](https://github.com/ckdake/pgrepbot/workflows/Security%20Scan/badge.svg)](https://github.com/ckdake/pgrepbot/actions/workflows/trivy.yml)
 [![codecov](https://codecov.io/gh/ckdake/pgrepbot/branch/main/graph/badge.svg)](https://codecov.io/gh/ckdake/pgrepbot)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -30,13 +33,17 @@ The dashboard provides a comprehensive view of your PostgreSQL replication topol
 
 ## Quick Start
 
-### Prerequisites
+### Local Development
+
+For local development and testing:
+
+#### Prerequisites
 
 - Python 3.13+ installed
 - Docker and Docker Compose installed
 - Make (recommended for convenience commands)
 
-### Local Development Setup
+#### Setup
 
 ```bash
 # 1. Set up development environment (first time only)
@@ -51,6 +58,34 @@ make run
 # 4. Visit the application
 open http://localhost:8000
 ```
+
+### AWS Deployment
+
+For production deployment to AWS, this repository includes a complete Terraform module:
+
+```bash
+# Deploy to AWS using the Terraform module
+# See terraform/modules/pgrepbot/README.md for complete documentation and examples
+
+# Basic usage:
+module "postgres_replication_manager" {
+  source = "./terraform/modules/pgrepbot"
+  
+  application = "postgres-replication-manager"
+  environment = "prod"
+  vpc_id      = "vpc-12345678"
+  
+  domain_name                    = "pgrepbot.example.io"
+  existing_alb_arn              = "arn:aws:elasticloadbalancing:..."
+  existing_alb_listener_arn     = "arn:aws:elasticloadbalancing:..."
+  existing_alb_security_group_id = "sg-alb123456"
+  
+  container_image        = "your-account.dkr.ecr.region.amazonaws.com/postgres-replication-manager:latest"
+  container_registry_arn = "arn:aws:ecr:region:account:repository/postgres-replication-manager"
+}
+```
+
+See [terraform/modules/pgrepbot/README.md](terraform/modules/pgrepbot/README.md) for complete documentation, examples, and deployment instructions.
 
 ### What You'll See
 
@@ -129,13 +164,20 @@ make build        # Build production Docker image
 
 ## Architecture
 
-The application consists of:
-
+### Local Development
 - **FastAPI Backend**: Python web server with async PostgreSQL connectivity
 - **LocalStack**: AWS service emulation for development (Secrets Manager, IAM)
 - **Redis**: Direct Redis container for configuration and metrics caching
 - **PostgreSQL**: Primary and replica containers for testing logical replication
 - **Authentication**: IAM Identity Center, Secrets Manager, or auth key fallback
+
+### AWS Production Deployment
+- **ECS Fargate**: Containerized application with auto-scaling
+- **Application Load Balancer**: HTTPS termination and load balancing
+- **ElastiCache Redis**: Managed Redis for configuration and metrics caching
+- **Secrets Manager**: Secure credential storage
+- **CloudWatch**: Centralized logging and monitoring
+- **Security Groups**: Network security with least privilege access
 
 ## Authentication Methods
 
@@ -149,7 +191,7 @@ The application automatically detects available authentication methods and provi
 
 ## Development Status
 
-✅ **Production Ready Core Features** ✅
+🎯 **Nearly Complete - Final Testing Phase** 🎯
 
 ### Implementation Progress
 
@@ -160,14 +202,14 @@ The application automatically detects available authentication methods and provi
 - ✅ **Task 5**: PostgreSQL connection management
 - ✅ **Task 6**: Replication discovery and monitoring core
 - ✅ **Task 7**: Replication stream management
-- ⏳ **Task 8**: Schema migration execution
+- ✅ **Task 8**: Schema migration execution system
 - ✅ **Task 9**: Web application foundation
 - ✅ **Task 10**: Topology visualization and web interface
 - ✅ **Task 11**: Alerting and error handling system
-- ⏳ **Task 12**: Deployment configuration
-- ⏳ **Task 13**: Comprehensive testing
+- ✅ **Task 12**: Production deployment configuration
+- ⏳ **Task 13**: Comprehensive testing and validation
 
-### Current Features (Tasks 1-11 Complete)
+### Production-Ready Features (Tasks 1-12 Complete)
 
 🎉 **Fully Implemented:**
 - **🔐 Multi-method Authentication**: IAM Identity Center, Secrets Manager, and Auth Key support with automatic fallback
@@ -175,17 +217,22 @@ The application automatically detects available authentication methods and provi
 - **🔌 Database Connection Management**: Async PostgreSQL connections with health monitoring, connection pooling, and credential resolution
 - **🔍 Replication Discovery**: Automatic detection of logical and physical replication streams with real-time status monitoring
 - **⚙️ Replication Stream Management**: Full lifecycle management - create, validate, monitor, and destroy replication streams
+- **🔄 Schema Migration System**: Topology-aware migration execution with Redis tracking and PostgreSQL source of truth
 - **🎨 Interactive Web Interface**: Modern FastAPI backend with responsive HTML/JavaScript frontend and D3.js topology visualization
 - **📊 Visual Topology Dashboard**: Interactive drag-and-drop topology visualization with real-time health indicators
 - **🚨 Advanced Alerting System**: Configurable thresholds, auto-resolution, Redis-backed alert management with detailed error reporting
 - **⏱️ Real-time Monitoring**: Automated health checks with live status updates and background monitoring tasks
-- **🧪 Comprehensive Testing**: 138+ tests covering unit, integration, performance, security, and end-to-end scenarios
+- **🏭 Production Deployment**: Complete Terraform module for AWS deployment with existing ALB integration
+- **🔄 CI/CD Pipeline**: Automated testing, building, linting, and security scanning workflows
 - **📱 Responsive Design**: Mobile-friendly interface with proper authentication flows and navigation
 
-🔧 **Test Environment:**
-- **Primary Database (5432)**: Hosts publications and serves both replica types
-- **Logical Replica (5433)**: Subscribes to publications for logical replication testing
-- **Physical Replica (5434)**: Streams WAL from primary for physical replication testing
+🔧 **Development & Production Ready:**
+- **Local Development**: Complete Docker Compose setup with LocalStack AWS emulation
+- **Test Environment**: Primary + Logical + Physical replica databases with automated test data
+- **Production Deployment**: Terraform module for AWS ECS Fargate with existing ALB integration
+- **Security by Default**: Always-encrypted Redis, 365-day log retention, comprehensive security scanning
+- **CI/CD Pipeline**: Automated test, build, lint, and security workflows with multi-arch Docker builds
+- **Migration Management**: Topology-aware schema migrations with retry and tracking capabilities
 - **Real-time Monitoring**: Both replication types active with lag monitoring and alerting
 - **Test Data Generation**: Automated setup of realistic replication scenarios
 

@@ -1,0 +1,92 @@
+name: Lint
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  python-lint:
+    runs-on: ubuntu-latest
+    name: Python Lint
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev,lint]"
+    
+    - name: Run linting with ruff
+      run: |
+        python -m ruff check app/ tests/
+        python -m ruff format --check app/ tests/
+
+  terraform-lint:
+    runs-on: ubuntu-latest
+    name: Terraform Lint
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: "~1.0"
+    
+    - name: Setup TFLint
+      uses: terraform-linters/setup-tflint@v4
+      with:
+        tflint_version: v0.50.3
+    
+    - name: Show TFLint version
+      run: tflint --version
+    
+    - name: Init TFLint
+      run: tflint --init
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+    
+    - name: Run TFLint
+      run: |
+        cd terraform/modules/pgrepbot
+        tflint --format compact
+    
+    - name: Terraform Format Check
+      run: |
+        cd terraform/modules/pgrepbot
+        terraform fmt -check -recursive
+    
+    - name: Terraform Validate
+      run: |
+        cd terraform/modules/pgrepbot
+        terraform init -backend=false
+        terraform validate
+
+  dockerfile-lint:
+    runs-on: ubuntu-latest
+    name: Dockerfile Lint
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run Hadolint
+      uses: hadolint/hadolint-action@v3.1.0
+      with:
+        dockerfile: Dockerfile
+        format: sarif
+        output-file: hadolint-results.sarif
+        no-fail: true
+    
+    - name: Upload Hadolint scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: hadolint-results.sarif

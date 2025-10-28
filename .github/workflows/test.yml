@@ -1,4 +1,4 @@
-name: CI
+name: Test
 
 on:
   push:
@@ -7,28 +7,6 @@ on:
     branches: [ main ]
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    name: Lint
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python 3.13
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.13'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev,lint]"
-    
-    - name: Run linting with ruff
-      run: |
-        python -m ruff check app/ tests/
-        python -m ruff format --check app/ tests/
-
   test:
     runs-on: ubuntu-latest
     name: Test
@@ -128,22 +106,3 @@ jobs:
         name: codecov-umbrella
         token: ${{ secrets.CODECOV_TOKEN }}
         fail_ci_if_error: false
-
-  build:
-    runs-on: ubuntu-latest
-    name: Build
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
-    - name: Build Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: false
-        tags: postgres-replication-manager:latest
-        cache-from: type=gha
-        cache-to: type=gha,mode=max

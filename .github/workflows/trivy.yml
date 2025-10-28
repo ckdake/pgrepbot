@@ -1,0 +1,105 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  terraform-scan:
+    runs-on: ubuntu-latest
+    name: Terraform Security Scan
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner on Terraform
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'config'
+        scan-ref: 'terraform/'
+        format: 'sarif'
+        output: 'trivy-terraform-results.sarif'
+        severity: 'CRITICAL,HIGH,MEDIUM'
+    
+    - name: Upload Terraform scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-terraform-results.sarif'
+        category: 'terraform'
+
+  python-scan:
+    runs-on: ubuntu-latest
+    name: Python Security Scan
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.13'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev,lint]"
+    
+    - name: Run Trivy vulnerability scanner on Python dependencies
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-python-results.sarif'
+        severity: 'CRITICAL,HIGH,MEDIUM'
+        scanners: 'vuln,secret'
+    
+    - name: Upload Python scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-python-results.sarif'
+        category: 'python'
+
+  repository-scan:
+    runs-on: ubuntu-latest
+    name: Repository Security Scan
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner on repository
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-repo-results.sarif'
+        severity: 'CRITICAL,HIGH,MEDIUM'
+        scanners: 'secret,config'
+        skip-dirs: 'node_modules,vendor,.git'
+    
+    - name: Upload repository scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-repo-results.sarif'
+        category: 'repository'
